@@ -94,40 +94,37 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8 font-['Comfortaa']">
       <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8">
         {/* Title Section */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">
-            MCL to Coordinated Sharing Detection Service
-          </h1>
-          <h2 className="text-xl text-gray-600 mt-2">Pre-processor</h2>
-        </div>
+        <h1 className="text-3xl font-bold text-[#3d3d3c] text-center mb-8">
+          MCL to CSDS Pre-processor
+        </h1>
         
         <div className="space-y-8">
           {/* Object ID Selection */}
           <div className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4 text-gray-700">
+            <h2 className="text-lg font-bold mb-4 text-[#3d3d3c]">
               Choose object_id source:
             </h2>
             <div className="flex space-x-6">
-              <label className="flex items-center hover:text-blue-600 cursor-pointer">
+              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                 <input
                   type="radio"
                   value="text"
                   checked={objectIdSource === 'text'}
                   onChange={(e) => setObjectIdSource(e.target.value as 'text' | 'link')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                 />
                 Text content
               </label>
-              <label className="flex items-center hover:text-blue-600 cursor-pointer">
+              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                 <input
                   type="radio"
                   value="link"
                   checked={objectIdSource === 'link'}
                   onChange={(e) => setObjectIdSource(e.target.value as 'text' | 'link')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                 />
                 Link attachment
               </label>
@@ -136,19 +133,19 @@ function App() {
 
           {/* File Upload */}
           <div className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4 text-gray-700">
+            <h2 className="text-lg font-bold mb-4 text-[#3d3d3c]">
               Upload CSV file:
             </h2>
             <input
               type="file"
               accept=".csv"
               onChange={handleFileUpload}
-              className="block w-full text-sm text-gray-500
+              className="block w-full text-sm text-[#3d3d3c]
                 file:mr-4 file:py-3 file:px-6
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100 
+                file:rounded-lg file:border-0
+                file:text-sm file:font-bold
+                file:bg-[#00926c] file:text-white
+                hover:file:bg-[#007d5c] 
                 cursor-pointer"
             />
           </div>
@@ -156,7 +153,7 @@ function App() {
           {/* Error Display */}
           {error && (
             <div className="bg-red-50 text-red-700 p-6 rounded-lg border border-red-200">
-              <div className="flex items-center">
+              <div className="flex items-center font-light">
                 <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
@@ -168,24 +165,24 @@ function App() {
           {/* Success Display */}
           {transformedData && (
             <div className="space-y-4">
-              <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-                <div className="flex items-center text-green-700 mb-2">
+              <div className="bg-[#00926c]/10 p-6 rounded-lg border border-[#00926c]/20">
+                <div className="flex items-center text-[#00926c] mb-2">
                   <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <p className="font-semibold">Successfully processed {processedRows} rows</p>
+                  <p className="font-bold">Successfully processed {processedRows} rows</p>
                 </div>
                 {skippedRows > 0 && (
-                  <p className="ml-7 text-yellow-600">
+                  <p className="ml-7 text-[#3d3d3c] font-light">
                     Skipped {skippedRows} rows due to missing or invalid data
                   </p>
                 )}
               </div>
               <button
                 onClick={handleDownload}
-                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold
-                  hover:bg-blue-700 transition-colors duration-200
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="w-full bg-[#00926c] text-white px-6 py-3 rounded-lg font-bold
+                  hover:bg-[#007d5c] transition-colors duration-200
+                  focus:outline-none focus:ring-2 focus:ring-[#00926c] focus:ring-offset-2"
               >
                 Download Transformed CSV
               </button>
