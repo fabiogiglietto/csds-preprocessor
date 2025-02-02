@@ -1,4 +1,3 @@
-// Input data structure from Meta Content Library
 export interface MetaContentLibraryRow {
     activities: number;
     content_type: string;
@@ -7,10 +6,10 @@ export interface MetaContentLibraryRow {
     is_branded_content: boolean;
     lang: string;
     link_attachment: {
-        caption: string;
-        description: string;
-        link: string;
-        name: string;
+        caption: string | null;
+        description: string | null;
+        link: string | null;
+        name: string | null;
     };
     match_type: number;
     mcl_url: string;
@@ -34,7 +33,7 @@ export interface MetaContentLibraryRow {
         sad_count: number;
         share_count: number;
         views: number;
-        views_date_last_refreshed: number;
+        views_date_last_refreshed: string;
         wow_count: number;
     };
     surface: {
@@ -46,28 +45,9 @@ export interface MetaContentLibraryRow {
     text: string;
 }
 
-// Output data structure for CSDS
 export interface CSDSRow {
-    account_id: number;      // from surface.id
-    content_id: number;      // from id
-    object_id: string;       // from text or link_attachment.link based on user choice
-    timestamp_share: number; // UNIX timestamp from creation_time
-}
-
-// Component props and state interfaces
-export interface TransformOptions {
-    objectIdSource: 'text' | 'link';
-}
-
-export interface TransformationResult {
-    success: boolean;
-    data?: CSDSRow[];
-    error?: string;
-    rowCount?: number;
-}
-
-export interface FileUploadState {
-    file: File | null;
-    isLoading: boolean;
-    error: string | null;
+    account_id: number;
+    content_id: number;
+    object_id: string;
+    timestamp_share: number;
 }

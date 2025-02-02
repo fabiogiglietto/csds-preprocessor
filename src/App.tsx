@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
-import { MetaContentLibraryRow, CSDSRow, TransformOptions } from './types';
+import { MetaContentLibraryRow, CSDSRow } from './types';
 
 function App() {
   const [objectIdSource, setObjectIdSource] = useState<'text' | 'link'>('text');
   const [transformedData, setTransformedData] = useState<CSDSRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [processedRows, setProcessedRows] = useState<number>(0);
+  const [skippedRows, setSkippedRows] = useState<number>(0);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -13,14 +15,41 @@ function App() {
 
     Papa.parse<MetaContentLibraryRow>(file, {
       header: true,
-      complete: (results) => {
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      complete: (results: Papa.ParseResult<MetaContentLibraryRow>) => {
         try {
-          const transformed = results.data.map(row => ({
-            account_id: row.surface.id,
-            content_id: row.id,
-            object_id: objectIdSource === 'text' ? row.text : row.link_attachment.link,
-            timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
-          }));
+          let skipped = 0;
+          const transformed = results.data
+            .filter(row => {
+              const isValid = Boolean(
+                row &&
+                row.surface?.id &&
+                row.id &&
+                row.creation_time &&
+                (objectIdSource === 'text' 
+                  ? typeof row.text === 'string' 
+                  : typeof row.link_attachment?.link === 'string')
+              );
+              if (!isValid) skipped++;
+              return isValid;
+            })
+            .map(row => ({
+              account_id: row.surface.id,
+              content_id: row.id,
+              object_id: objectIdSource === 'text' 
+                ? row.text 
+                : row.link_attachment.link || '',
+              timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
+            }));
+
+          setSkippedRows(skipped);
+          setProcessedRows(transformed.length);
+
+          if (transformed.length === 0) {
+            setError('No valid data found in CSV');
+            return;
+          }
 
           setTransformedData(transformed);
           setError(null);
@@ -28,8 +57,8 @@ function App() {
           setError(`Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
       },
-      error: (err) => {
-        setError(`Error parsing CSV: ${err.message}`);
+      error: (error: Error) => {
+        setError(`Error parsing CSV: ${error.message}`);
       }
     });
   };
@@ -46,6 +75,7 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -54,7 +84,6 @@ function App() {
         <h1 className="text-2xl font-bold mb-6">MCL to CSDS Transformer</h1>
         
         <div className="space-y-6">
-          {/* Object ID Source Selection */}
           <div>
             <h2 className="text-lg font-semibold mb-2">Choose object_id source:</h2>
             <div className="flex space-x-4">
@@ -81,7 +110,6 @@ function App() {
             </div>
           </div>
 
-          {/* File Upload */}
           <div>
             <h2 className="text-lg font-semibold mb-2">Upload CSV file:</h2>
             <input
@@ -97,18 +125,21 @@ function App() {
             />
           </div>
 
-          {/* Error Display */}
           {error && (
             <div className="bg-red-50 text-red-700 p-4 rounded">
               {error}
             </div>
           )}
 
-          {/* Results */}
           {transformedData && (
             <div className="space-y-4">
               <div className="bg-green-50 text-green-700 p-4 rounded">
-                Successfully processed {transformedData.length} rows
+                <p>Successfully processed {processedRows} rows</p>
+                {skippedRows > 0 && (
+                  <p className="mt-2 text-yellow-600">
+                    Skipped {skippedRows} rows due to missing or invalid data
+                  </p>
+                )}
               </div>
               <button
                 onClick={handleDownload}
