@@ -26,7 +26,7 @@ The tool generates a CSV file with the following columns:
 - timestamp_share: UNIX timestamp of the post (converted from creation_time)
 
 ## Usage
-1. Visit https://fabiogiglietto.github.io/mcl-csdc-preprocessor/
+1. Visit https://fabiogiglietto.github.io/mcl-csds-preprocessor/
 2. Choose whether to use text content or link as object_id
 3. Upload your MCL CSV file
 4. Download the transformed CSV file
