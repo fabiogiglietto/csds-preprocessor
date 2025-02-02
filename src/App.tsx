@@ -22,7 +22,6 @@ function App() {
           let skipped = 0;
           const transformed = results.data
             .filter((row: any) => {
-              // Check required fields exist
               const hasRequiredFields = Boolean(
                 row &&
                 row['surface.id'] && 
@@ -48,11 +47,20 @@ function App() {
               timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
             }));
 
+          // Calculate estimated file size
+          const csvContent = Papa.unparse(transformed);
+          const estimatedSize = new Blob([csvContent]).size / (1024 * 1024); // Size in MB
+
           setSkippedRows(skipped);
           setProcessedRows(transformed.length);
 
           if (transformed.length === 0) {
             setError('No valid data found in CSV');
+            return;
+          }
+
+          if (estimatedSize > 30) {
+            setError(`Warning: The transformed file size (${estimatedSize.toFixed(1)}MB) exceeds the 30MB limit of the Coordinated Sharing Detection Service. Please reduce the number of rows.`);
             return;
           }
 
