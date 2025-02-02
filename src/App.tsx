@@ -13,28 +13,42 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    Papa.parse<MetaContentLibraryRow>(file, {
+    Papa.parse(file, {
       header: true,
       dynamicTyping: true,
       skipEmptyLines: true,
-      complete: (results: Papa.ParseResult<MetaContentLibraryRow>) => {
+      transformHeader: (header: string) => {
+        // Remove quotes and whitespace from headers
+        return header.replace(/["'\s]/g, '');
+      },
+      complete: (results) => {
         try {
+          // Log the first row to see its structure
+          console.log('First row:', results.data[0]);
+          
           let skipped = 0;
           const transformed = results.data
-            .filter(row => {
+            .filter((row: any) => {
+              // Log problematic rows
+              if (!row || !row.surface || !row.surface.id) {
+                console.log('Problematic row:', row);
+              }
+              
               const isValid = Boolean(
                 row &&
-                row.surface?.id &&
+                row.surface &&
+                typeof row.surface.id !== 'undefined' &&
                 row.id &&
                 row.creation_time &&
                 (objectIdSource === 'text' 
-                  ? typeof row.text === 'string' 
-                  : typeof row.link_attachment?.link === 'string')
+                  ? typeof row.text !== 'undefined' 
+                  : row.link_attachment && typeof row.link_attachment.link !== 'undefined')
               );
+              
               if (!isValid) skipped++;
               return isValid;
             })
-            .map(row => ({
+            .map((row: any) => ({
               account_id: row.surface.id,
               content_id: row.id,
               object_id: objectIdSource === 'text' 
@@ -54,10 +68,12 @@ function App() {
           setTransformedData(transformed);
           setError(null);
         } catch (err) {
+          console.error('Processing error:', err);
           setError(`Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
       },
       error: (error: Error) => {
+        console.error('Parse error:', error);
         setError(`Error parsing CSV: ${error.message}`);
       }
     });
