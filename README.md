@@ -6,7 +6,7 @@ A web application that transforms CSV files from the Meta Content Library (MCL) 
 
 - Converts MCL CSV data to CSDS format
 - Allows choosing between post text or link as object_id
-- Handles file size limitations (30MB max for CSDS)
+- Handles file size limitations (15MB max for CSDS)
 - Provides feedback on processed and skipped rows
 - Client-side processing (no data is sent to any server)
 
