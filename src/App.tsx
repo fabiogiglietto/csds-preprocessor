@@ -3,15 +3,21 @@ import Papa from 'papaparse';
 import { CSDSRow } from './types';
 
 function App() {
-  const [objectIdSource, setObjectIdSource] = useState<'text' | 'link'>('text');
+  const [objectIdSource, setObjectIdSource] = useState<'text' | 'link' | null>(null);
   const [transformedData, setTransformedData] = useState<CSDSRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processedRows, setProcessedRows] = useState<number>(0);
   const [skippedRows, setSkippedRows] = useState<number>(0);
 
+  const handleObjectIdSourceChange = (value: 'text' | 'link') => {
+    setObjectIdSource(value);
+    setTransformedData(null);
+    setError(null);
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !objectIdSource) return;
 
     Papa.parse(file, {
       header: true,
@@ -102,18 +108,19 @@ function App() {
         </h1>
         
         <div className="space-y-8">
-          {/* Object ID Selection */}
+          {/* Step 1: Object ID Selection */}
           <div className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-lg font-bold mb-4 text-[#3d3d3c]">
+            <h2 className="text-lg font-bold mb-2 text-[#3d3d3c] flex items-center">
+              <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">1</span>
               Choose object_id source:
             </h2>
-            <div className="flex space-x-6">
+            <div className="flex space-x-6 mt-4">
               <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                 <input
                   type="radio"
                   value="text"
                   checked={objectIdSource === 'text'}
-                  onChange={(e) => setObjectIdSource(e.target.value as 'text' | 'link')}
+                  onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
                   className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                 />
                 Text content
@@ -123,7 +130,7 @@ function App() {
                   type="radio"
                   value="link"
                   checked={objectIdSource === 'link'}
-                  onChange={(e) => setObjectIdSource(e.target.value as 'text' | 'link')}
+                  onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
                   className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                 />
                 Link attachment
@@ -131,23 +138,31 @@ function App() {
             </div>
           </div>
 
-          {/* File Upload */}
-          <div className="bg-gray-50 rounded-lg p-6">
-            <h2 className="text-lg font-bold mb-4 text-[#3d3d3c]">
+          {/* Step 2: File Upload */}
+          <div className={`bg-gray-50 rounded-lg p-6 ${!objectIdSource ? 'opacity-50' : ''}`}>
+            <h2 className="text-lg font-bold mb-2 text-[#3d3d3c] flex items-center">
+              <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">2</span>
               Upload CSV file:
             </h2>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="block w-full text-sm text-[#3d3d3c]
-                file:mr-4 file:py-3 file:px-6
-                file:rounded-lg file:border-0
-                file:text-sm file:font-bold
-                file:bg-[#00926c] file:text-white
-                hover:file:bg-[#007d5c] 
-                cursor-pointer"
-            />
+            <div className="mt-4">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                disabled={!objectIdSource}
+                className="block w-full text-sm text-[#3d3d3c]
+                  file:mr-4 file:py-3 file:px-6
+                  file:rounded-lg file:border-0
+                  file:text-sm file:font-bold
+                  file:bg-[#00926c] file:text-white
+                  hover:file:bg-[#007d5c] 
+                  cursor-pointer
+                  disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              {!objectIdSource && (
+                <p className="text-sm text-[#3d3d3c]/70 mt-2">Please select an object_id source first</p>
+              )}
+            </div>
           </div>
 
           {/* Error Display */}
