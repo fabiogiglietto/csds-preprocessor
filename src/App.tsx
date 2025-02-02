@@ -59,8 +59,8 @@ function App() {
             return;
           }
 
-          if (estimatedSize > 30) {
-            setError(`Warning: The transformed file size (${estimatedSize.toFixed(1)}MB) exceeds the 30MB limit of the Coordinated Sharing Detection Service. Please reduce the number of rows.`);
+          if (estimatedSize > 15) {
+            setError(`Warning: The transformed file size (${estimatedSize.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service. Please reduce the number of rows.`);
             return;
           }
 
