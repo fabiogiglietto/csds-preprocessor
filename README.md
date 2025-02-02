@@ -1,50 +1,48 @@
-# React + TypeScript + Vite
+# MCL to CSDS Pre-processor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web application that transforms CSV files from the Meta Content Library (MCL) format into the format required by the Coordinated Sharing Detection Service (CSDS).
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Converts MCL CSV data to CSDS format
+- Allows choosing between post text or link as object_id
+- Handles file size limitations (30MB max for CSDS)
+- Provides feedback on processed and skipped rows
+- Client-side processing (no data is sent to any server)
 
-## Expanding the ESLint configuration
+## Input Format (MCL)
+The tool expects a CSV file from Meta Content Library with the following required fields:
+- surface.id (account identifier)
+- id (content identifier)
+- creation_time (post timestamp)
+- text (post text content)
+- link_attachment.link (link URL if present)
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Output Format (CSDS)
+The tool generates a CSV file with the following columns:
+- account_id: Unique ID of an account (from surface.id)
+- content_id: Unique ID of account's posts (from id)
+- object_id: Content identifier (either text or link_attachment.link)
+- timestamp_share: UNIX timestamp of the post (converted from creation_time)
 
-- Configure the top-level `parserOptions` property like this:
+## Usage
+1. Visit https://fabiogiglietto.github.io/mcl-csdc-preprocessor/
+2. Choose whether to use text content or link as object_id
+3. Upload your MCL CSV file
+4. Download the transformed CSV file
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## Development
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+Built with:
+- React + TypeScript
+- Vite
+- TailwindCSS
+- Papa Parse for CSV handling
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+## License
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+MIT License
+
+## Author
+
+Fabio Giglietto - [@fabiogiglietto](https://github.com/fabiogiglietto)
