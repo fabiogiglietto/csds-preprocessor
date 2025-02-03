@@ -2,12 +2,22 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
 
+type SourceType = 'facebook' | 'instagram' | null;
+
 function App() {
+  const [sourceType, setSourceType] = useState<SourceType>(null);
   const [objectIdSource, setObjectIdSource] = useState<'text' | 'link' | null>(null);
   const [transformedData, setTransformedData] = useState<CSDSRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processedRows, setProcessedRows] = useState<number>(0);
   const [skippedRows, setSkippedRows] = useState<number>(0);
+
+  const handleSourceTypeChange = (value: SourceType) => {
+    setSourceType(value);
+    setObjectIdSource(null);
+    setTransformedData(null);
+    setError(null);
+  };
 
   const handleObjectIdSourceChange = (value: 'text' | 'link') => {
     setObjectIdSource(value);
@@ -17,7 +27,7 @@ function App() {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !objectIdSource) return;
+    if (!file || !objectIdSource || !sourceType) return;
 
     Papa.parse(file, {
       header: true,
@@ -30,12 +40,12 @@ function App() {
             .filter((row: any) => {
               const hasRequiredFields = Boolean(
                 row &&
-                row['surface.id'] && 
+                row['post_owner.id'] && 
                 row.id &&
                 row.creation_time &&
                 (objectIdSource === 'text' 
                   ? row.text 
-                  : row['link_attachment.link'])
+                  : sourceType === 'facebook' ? row['link_attachment.link'] : false)
               );
 
               if (!hasRequiredFields) {
@@ -45,7 +55,7 @@ function App() {
               return true;
             })
             .map((row: any) => ({
-              account_id: row['surface.id'],
+              account_id: row['post_owner.id'],
               content_id: row.id,
               object_id: objectIdSource === 'text' 
                 ? row.text 
@@ -108,10 +118,40 @@ function App() {
         </h1>
         
         <div className="space-y-8">
-          {/* Step 1: Object ID Selection */}
+          {/* Step 1: Source Selection */}
           <div className="bg-gray-50 rounded-lg p-6">
             <h2 className="text-lg font-bold mb-2 text-[#3d3d3c] flex items-center">
               <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">1</span>
+              Choose source platform:
+            </h2>
+            <div className="flex space-x-6 mt-4">
+              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                <input
+                  type="radio"
+                  value="facebook"
+                  checked={sourceType === 'facebook'}
+                  onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
+                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                />
+                Facebook
+              </label>
+              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                <input
+                  type="radio"
+                  value="instagram"
+                  checked={sourceType === 'instagram'}
+                  onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
+                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                />
+                Instagram
+              </label>
+            </div>
+          </div>
+
+          {/* Step 2: Object ID Selection */}
+          <div className={`bg-gray-50 rounded-lg p-6 ${!sourceType ? 'opacity-50' : ''}`}>
+            <h2 className="text-lg font-bold mb-2 text-[#3d3d3c] flex items-center">
+              <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">2</span>
               Choose object_id source:
             </h2>
             <div className="flex space-x-6 mt-4">
@@ -121,27 +161,34 @@ function App() {
                   value="text"
                   checked={objectIdSource === 'text'}
                   onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
+                  disabled={!sourceType}
                   className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                 />
                 Text content
               </label>
-              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                <input
-                  type="radio"
-                  value="link"
-                  checked={objectIdSource === 'link'}
-                  onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
-                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                />
-                Link attachment
-              </label>
+              {sourceType === 'facebook' && (
+                <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                  <input
+                    type="radio"
+                    value="link"
+                    checked={objectIdSource === 'link'}
+                    onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
+                    disabled={!sourceType}
+                    className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                  />
+                  Link attachment
+                </label>
+              )}
             </div>
+            {!sourceType && (
+              <p className="text-sm text-[#3d3d3c]/70 mt-2">Please select a source platform first</p>
+            )}
           </div>
 
-          {/* Step 2: File Upload */}
+          {/* Step 3: File Upload */}
           <div className={`bg-gray-50 rounded-lg p-6 ${!objectIdSource ? 'opacity-50' : ''}`}>
             <h2 className="text-lg font-bold mb-2 text-[#3d3d3c] flex items-center">
-              <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">2</span>
+              <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">3</span>
               Upload CSV file:
             </h2>
             <div className="mt-4">
@@ -160,7 +207,7 @@ function App() {
                   disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {!objectIdSource && (
-                <p className="text-sm text-[#3d3d3c]/70 mt-2">Please select an object_id source first</p>
+                <p className="text-sm text-[#3d3d3c]/70 mt-2">Please complete the previous steps first</p>
               )}
             </div>
           </div>
