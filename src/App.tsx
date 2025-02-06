@@ -31,7 +31,7 @@ function App() {
 
    Papa.parse(file, {
      header: true,
-     dynamicTyping: true,
+     dynamicTyping: false,
      skipEmptyLines: true,
      complete: (results) => {
        try {
@@ -56,9 +56,12 @@ function App() {
              return true;
            })
            .map((row: any) => {
-             const accountId = String(row['post_owner.name']).trim() + ' (' + String(row['post_owner.id']).trim() + ')';
+             console.log('Processing row:', {
+               name: row['post_owner.name'],
+               id: row['post_owner.id']
+             });
              return {
-               account_id: accountId,
+               account_id: `${row['post_owner.name']} (${row['post_owner.id']})`,
                content_id: row.id,
                object_id: objectIdSource === 'text' 
                  ? row.text 
