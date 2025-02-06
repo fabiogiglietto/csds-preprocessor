@@ -55,14 +55,17 @@ function App() {
              }
              return true;
            })
-           .map((row: any) => ({
-             account_id: `${row['post_owner.name']} (${row['post_owner.id']})`,
-             content_id: row.id,
-             object_id: objectIdSource === 'text' 
-               ? row.text 
-               : row['link_attachment.link'] || '',
-             timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
-           }));
+           .map((row: any) => {
+             const accountId = String(row['post_owner.name']).trim() + ' (' + String(row['post_owner.id']).trim() + ')';
+             return {
+               account_id: accountId,
+               content_id: row.id,
+               object_id: objectIdSource === 'text' 
+                 ? row.text 
+                 : row['link_attachment.link'] || '',
+               timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
+             };
+           });
 
          const csvContent = Papa.unparse(transformed);
          const estimatedSize = new Blob([csvContent]).size / (1024 * 1024);
