@@ -2,13 +2,14 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
 
-type SourceType = 'facebook' | 'instagram' | null;
-type AccountSource = 'post_owner' | 'surface' | null;
+type SourceType = 'facebook' | 'instagram' | 'tiktok' | null;
+type AccountSource = 'post_owner' | 'surface' | 'author' | null;
+type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' | 'video_url' | 'effect_ids' | 'music_id' | 'hashtag_names' | null;
 
 function App() {
   const [sourceType, setSourceType] = useState<SourceType>(null);
   const [accountSource, setAccountSource] = useState<AccountSource>(null);
-  const [objectIdSource, setObjectIdSource] = useState<'text' | 'link' | null>(null);
+  const [objectIdSource, setObjectIdSource] = useState<ObjectIdSource>(null);
   const [transformedData, setTransformedData] = useState<CSDSRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [processedRows, setProcessedRows] = useState<number>(0);
@@ -29,7 +30,7 @@ function App() {
     setError(null);
   };
 
-  const handleObjectIdSourceChange = (value: 'text' | 'link') => {
+  const handleObjectIdSourceChange = (value: ObjectIdSource) => {
     setObjectIdSource(value);
     setTransformedData(null);
     setError(null);
@@ -48,19 +49,59 @@ function App() {
           let skipped = 0;
           const transformed = results.data
             .filter((row: any) => {
-              const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
-              const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+              let hasRequiredFields = false;
               
-              const hasRequiredFields = Boolean(
-                row &&
-                row[idField] && 
-                row[nameField] &&
-                row.id &&
-                row.creation_time &&
-                (objectIdSource === 'text' 
-                  ? row.text 
-                  : sourceType === 'facebook' ? row['link_attachment.link'] : false)
-              );
+              if (sourceType === 'tiktok') {
+                // TikTok API specific field validation
+                const hasRequiredBaseFields = Boolean(
+                  row &&
+                  row.video_id &&
+                  row.author_name &&
+                  row.create_time
+                );
+                
+                // Check for the specific objectIdSource field
+                let hasObjectIdField = false;
+                switch(objectIdSource) {
+                  case 'video_description':
+                    hasObjectIdField = Boolean(row.video_description);
+                    break;
+                  case 'voice_to_text':
+                    hasObjectIdField = Boolean(row.voice_to_text);
+                    break;
+                  case 'video_url':
+                    hasObjectIdField = Boolean(row.video_url);
+                    break;
+                  case 'effect_ids':
+                    hasObjectIdField = row.effect_ids !== null && row.effect_ids !== undefined;
+                    break;
+                  case 'music_id':
+                    hasObjectIdField = row.music_id !== null && row.music_id !== undefined;
+                    break;
+                  case 'hashtag_names':
+                    hasObjectIdField = Boolean(row.hashtag_names);
+                    break;
+                  default:
+                    hasObjectIdField = false;
+                }
+                
+                hasRequiredFields = hasRequiredBaseFields && hasObjectIdField;
+              } else {
+                // Facebook/Instagram field validation (existing logic)
+                const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                
+                hasRequiredFields = Boolean(
+                  row &&
+                  row[idField] && 
+                  row[nameField] &&
+                  row.id &&
+                  row.creation_time &&
+                  (objectIdSource === 'text' 
+                    ? row.text 
+                    : sourceType === 'facebook' ? row['link_attachment.link'] : false)
+                );
+              }
 
               if (!hasRequiredFields) {
                 skipped++;
@@ -69,22 +110,54 @@ function App() {
               return true;
             })
             .map((row: any) => {
-              const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
-              const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
-              
-              console.log('Processing row:', {
-                name: row[nameField],
-                id: row[idField]
-              });
-              
-              return {
-                account_id: `${row[nameField]} (${row[idField]})`,
-                content_id: row.id,
-                object_id: objectIdSource === 'text' 
-                  ? row.text 
-                  : row['link_attachment.link'] || '',
-                timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
-              };
+              if (sourceType === 'tiktok') {
+                // TikTok transformation
+                let objectId = '';
+                
+                switch(objectIdSource) {
+                  case 'video_description':
+                    objectId = row.video_description || '';
+                    break;
+                  case 'voice_to_text':
+                    objectId = row.voice_to_text || '';
+                    break;
+                  case 'video_url':
+                    objectId = row.video_url || '';
+                    break;
+                  case 'effect_ids':
+                    objectId = row.effect_ids ? row.effect_ids.toString() : '';
+                    break;
+                  case 'music_id':
+                    objectId = row.music_id ? row.music_id.toString() : '';
+                    break;
+                  case 'hashtag_names':
+                    objectId = row.hashtag_names || '';
+                    break;
+                }
+                
+                // Parse timestamp from create_time
+                const timestamp = new Date(row.create_time).getTime() / 1000;
+                
+                return {
+                  account_id: `${row.author_name} (${row.region_code || 'unknown'})`,
+                  content_id: row.video_id,
+                  object_id: objectId,
+                  timestamp_share: Math.floor(timestamp)
+                };
+              } else {
+                // Facebook/Instagram transformation (existing logic)
+                const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                
+                return {
+                  account_id: `${row[nameField]} (${row[idField]})`,
+                  content_id: row.id,
+                  object_id: objectIdSource === 'text' 
+                    ? row.text 
+                    : row['link_attachment.link'] || '',
+                  timestamp_share: Math.floor(new Date(row.creation_time).getTime() / 1000)
+                };
+              }
             });
 
           const csvContent = Papa.unparse(transformed);
@@ -135,9 +208,13 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8 font-['Comfortaa']">
       <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-[#3d3d3c] text-center mb-8">
-          MCL to CSDS Pre-processor
+        <h1 className="text-3xl font-bold text-[#3d3d3c] text-center mb-4">
+          CSDS Pre-processor
         </h1>
+        <div className="mb-8 text-center px-4 text-[#3d3d3c]/80 max-w-2xl mx-auto">
+          <p className="mb-2">Transform data from Meta Content Library and TikTok Research API into the format required by the Coordinated Sharing Detection Service powered by <a href="https://github.com/nicolarighetti/CooRTweet" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CooRTweet</a>.</p>
+          <p>This tool helps researchers identify coordinated content sharing patterns across platforms by standardizing data sources into a unified format for analysis.</p>
+        </div>
         
         <div className="space-y-8">
           {/* Step 1: Source Selection */}
@@ -146,7 +223,7 @@ function App() {
               <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">1</span>
               Choose source platform:
             </h2>
-            <div className="flex space-x-6 mt-4">
+            <div className="flex flex-wrap gap-6 mt-4">
               <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                 <input
                   type="radio"
@@ -167,6 +244,16 @@ function App() {
                 />
                 Instagram
               </label>
+              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                <input
+                  type="radio"
+                  value="tiktok"
+                  checked={sourceType === 'tiktok'}
+                  onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
+                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                />
+                TikTok
+              </label>
             </div>
           </div>
 
@@ -176,30 +263,46 @@ function App() {
               <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">2</span>
               Choose account source:
             </h2>
-            <div className="flex space-x-6 mt-4">
-              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                <input
-                  type="radio"
-                  value="post_owner"
-                  checked={accountSource === 'post_owner'}
-                  onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)}
-                  disabled={!sourceType}
-                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                />
-                Post Owner
-              </label>
-              {sourceType === 'facebook' && (
+            <div className="flex flex-wrap gap-6 mt-4">
+              {sourceType === 'tiktok' ? (
                 <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                   <input
                     type="radio"
-                    value="surface"
-                    checked={accountSource === 'surface'}
+                    value="author"
+                    checked={accountSource === 'author'}
                     onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)}
                     disabled={!sourceType}
                     className="mr-2 text-[#00926c] focus:ring-[#00926c]"
                   />
-                  Surface
+                  Author
                 </label>
+              ) : (
+                <>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="post_owner"
+                      checked={accountSource === 'post_owner'}
+                      onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)}
+                      disabled={!sourceType}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Post Owner
+                  </label>
+                  {sourceType === 'facebook' && (
+                    <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                      <input
+                        type="radio"
+                        value="surface"
+                        checked={accountSource === 'surface'}
+                        onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)}
+                        disabled={!sourceType}
+                        className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                      />
+                      Surface
+                    </label>
+                  )}
+                </>
               )}
             </div>
             {!sourceType && (
@@ -213,30 +316,105 @@ function App() {
               <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 text-sm mr-2">3</span>
               Choose object_id source:
             </h2>
-            <div className="flex space-x-6 mt-4">
-              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                <input
-                  type="radio"
-                  value="text"
-                  checked={objectIdSource === 'text'}
-                  onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
-                  disabled={!accountSource}
-                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                />
-                Text content
-              </label>
-              {sourceType === 'facebook' && (
-                <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                  <input
-                    type="radio"
-                    value="link"
-                    checked={objectIdSource === 'link'}
-                    onChange={(e) => handleObjectIdSourceChange(e.target.value as 'text' | 'link')}
-                    disabled={!accountSource}
-                    className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                  />
-                  Link attachment
-                </label>
+            <div className="flex flex-wrap gap-6 mt-4">
+              {sourceType === 'tiktok' ? (
+                // TikTok specific object_id sources
+                <>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="video_description"
+                      checked={objectIdSource === 'video_description'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Video Description
+                  </label>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="voice_to_text"
+                      checked={objectIdSource === 'voice_to_text'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Voice to Text
+                  </label>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="video_url"
+                      checked={objectIdSource === 'video_url'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Video URL
+                  </label>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="effect_ids"
+                      checked={objectIdSource === 'effect_ids'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Effect IDs
+                  </label>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="music_id"
+                      checked={objectIdSource === 'music_id'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Music ID
+                  </label>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="hashtag_names"
+                      checked={objectIdSource === 'hashtag_names'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Hashtag Names
+                  </label>
+                </>
+              ) : (
+                // Facebook/Instagram object_id sources (existing logic)
+                <>
+                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                    <input
+                      type="radio"
+                      value="text"
+                      checked={objectIdSource === 'text'}
+                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                      disabled={!accountSource}
+                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                    />
+                    Text content
+                  </label>
+                  {sourceType === 'facebook' && (
+                    <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                      <input
+                        type="radio"
+                        value="link"
+                        checked={objectIdSource === 'link'}
+                        onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
+                        disabled={!accountSource}
+                        className="mr-2 text-[#00926c] focus:ring-[#00926c]"
+                      />
+                      Link attachment
+                    </label>
+                  )}
+                </>
               )}
             </div>
             {!accountSource && (
