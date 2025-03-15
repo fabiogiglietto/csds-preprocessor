@@ -213,7 +213,12 @@ function App() {
         </h1>
         <div className="mb-8 text-center px-4 text-[#3d3d3c]/80 max-w-2xl mx-auto">
           <p className="mb-2">Transform data from Meta Content Library and TikTok Research API into the format required by the Coordinated Sharing Detection Service powered by <a href="https://github.com/nicolarighetti/CooRTweet" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CooRTweet</a>.</p>
-          <p>This tool helps researchers identify coordinated content sharing patterns across platforms by standardizing data sources into a unified format for analysis.</p>
+          <p className="mt-3 text-sm bg-blue-50 text-blue-700 p-2 rounded-md inline-block">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1 mb-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Your data is processed entirely in your browser — no CSV content is sent to any server or third party.
+          </p>
         </div>
         
         <div className="space-y-8">
