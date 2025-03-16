@@ -45,9 +45,26 @@ export interface MetaContentLibraryRow {
     text: string;
 }
 
+export interface TikTokResearchRow {
+    video_id: number;
+    author_name: string;
+    view_count: number;
+    comment_count: number;
+    share_count: number;
+    like_count: number;
+    region_code: string;
+    create_time: string;
+    effect_ids: number | string;
+    music_id: number | string;
+    video_description: string;
+    hashtag_names: string;
+    voice_to_text: string;
+    video_url: string;
+}
+
 export interface CSDSRow {
-    account_id: number;
-    content_id: number;
+    account_id: string;
+    content_id: number | string;
     object_id: string;
     timestamp_share: number;
 }

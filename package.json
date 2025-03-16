@@ -33,5 +33,5 @@
     "typescript": "^5.2.2",
     "vite": "^5.0.8"
   },
-  "homepage": "https://fabiogiglietto.github.io/mcl-csds-preprocessor"
+  "homepage": "https://fabiogiglietto.github.io/csds-preprocessor"
 }
