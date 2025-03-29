@@ -2,9 +2,9 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
 
-type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'youtube' | null;
-type AccountSource = 'post_owner' | 'surface' | 'author' | 'channel' | null;
-type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' | 'video_url' | 'effect_ids' | 'music_id' | 'hashtag_names' | 'videoTitle' | 'videoDescription' | 'tags' | null;
+type SourceType = 'facebook' | 'instagram' | 'tiktok' | null;
+type AccountSource = 'post_owner' | 'surface' | 'author' | null;
+type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' | 'video_url' | 'effect_ids' | 'music_id' | 'hashtag_names' | null;
 
 function App() {
   const [sourceType, setSourceType] = useState<SourceType>(null);
@@ -51,34 +51,7 @@ function App() {
             .filter((row: any) => {
               let hasRequiredFields = false;
               
-              if (sourceType === 'youtube') {
-                // YouTube API specific field validation
-                const hasRequiredBaseFields = Boolean(
-                  row &&
-                  row.videoId &&
-                  row.channelTitle &&
-                  row.channelId &&
-                  row.publishedAt
-                );
-                
-                // Check for the specific objectIdSource field
-                let hasObjectIdField = false;
-                switch(objectIdSource) {
-                  case 'videoTitle':
-                    hasObjectIdField = Boolean(row.videoTitle);
-                    break;
-                  case 'videoDescription':
-                    hasObjectIdField = Boolean(row.videoDescription);
-                    break;
-                  case 'tags':
-                    hasObjectIdField = Boolean(row.tags);
-                    break;
-                  default:
-                    hasObjectIdField = false;
-                }
-                
-                hasRequiredFields = hasRequiredBaseFields && hasObjectIdField;
-              } else if (sourceType === 'tiktok') {
+              if (sourceType === 'tiktok') {
                 // TikTok API specific field validation
                 const hasRequiredBaseFields = Boolean(
                   row &&
@@ -137,32 +110,7 @@ function App() {
               return true;
             })
             .map((row: any) => {
-              if (sourceType === 'youtube') {
-                // YouTube transformation
-                let objectId = '';
-                
-                switch(objectIdSource) {
-                  case 'videoTitle':
-                    objectId = row.videoTitle || '';
-                    break;
-                  case 'videoDescription':
-                    objectId = row.videoDescription || '';
-                    break;
-                  case 'tags':
-                    objectId = row.tags || '';
-                    break;
-                }
-                
-                // Parse timestamp from publishedAt
-                const timestamp = new Date(row.publishedAt).getTime() / 1000;
-                
-                return {
-                  account_id: `${row.channelTitle} (${row.channelId})`,
-                  content_id: row.videoId,
-                  object_id: objectId,
-                  timestamp_share: Math.floor(timestamp)
-                };
-              } else if (sourceType === 'tiktok') {
+              if (sourceType === 'tiktok') {
                 // TikTok transformation
                 let objectId = '';
                 
@@ -264,7 +212,7 @@ function App() {
           CSDS Pre-processor
         </h1>
         <div className="mb-8 text-center px-4 text-[#3d3d3c]/80 max-w-2xl mx-auto">
-          <p className="mb-2">Transform data from Meta Content Library, TikTok Research API and YouTube Data Tools into the format required by the Coordinated Sharing Detection Service powered by <a href="https://github.com/nicolarighetti/CooRTweet" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CooRTweet</a>.</p>
+          <p className="mb-2">Transform data from <a href="https://developers.facebook.com/docs/content-library-and-api/content-library" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Meta Content Library</a>, <a href="https://developers.tiktok.com/products/research-api/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">TikTok Research API</a>, or <a href="https://ytdt.digitalmethods.net/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">YouTube Data Tools</a> into the format required by the <a href="https://coortweet.lab.atc.gr/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Coordinated Sharing Detection Service</a> powered by <a href="https://github.com/nicolarighetti/CooRTweet" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CooRTweet</a>.</p>
           <p className="mt-3 text-sm bg-blue-50 text-blue-700 p-2 rounded-md inline-block">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1 mb-0.5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -311,16 +259,6 @@ function App() {
                 />
                 TikTok
               </label>
-              <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                <input
-                  type="radio"
-                  value="youtube"
-                  checked={sourceType === 'youtube'}
-                  onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
-                  className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                />
-                YouTube
-              </label>
             </div>
           </div>
 
@@ -331,19 +269,7 @@ function App() {
               Choose account source:
             </h2>
             <div className="flex flex-wrap gap-6 mt-4">
-              {sourceType === 'youtube' ? (
-                <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                  <input
-                    type="radio"
-                    value="channel"
-                    checked={accountSource === 'channel'}
-                    onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)}
-                    disabled={!sourceType}
-                    className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                  />
-                  Channel
-                </label>
-              ) : sourceType === 'tiktok' ? (
+              {sourceType === 'tiktok' ? (
                 <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                   <input
                     type="radio"
@@ -396,44 +322,7 @@ function App() {
               Choose object_id source:
             </h2>
             <div className="flex flex-wrap gap-6 mt-4">
-              {sourceType === 'youtube' ? (
-                // YouTube specific object_id sources
-                <>
-                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                    <input
-                      type="radio"
-                      value="videoTitle"
-                      checked={objectIdSource === 'videoTitle'}
-                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
-                      disabled={!accountSource}
-                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                    />
-                    Video Title
-                  </label>
-                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                    <input
-                      type="radio"
-                      value="videoDescription"
-                      checked={objectIdSource === 'videoDescription'}
-                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
-                      disabled={!accountSource}
-                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                    />
-                    Video Description
-                  </label>
-                  <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                    <input
-                      type="radio"
-                      value="tags"
-                      checked={objectIdSource === 'tags'}
-                      onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)}
-                      disabled={!accountSource}
-                      className="mr-2 text-[#00926c] focus:ring-[#00926c]"
-                    />
-                    Tags
-                  </label>
-                </>
-              ) : sourceType === 'tiktok' ? (
+              {sourceType === 'tiktok' ? (
                 // TikTok specific object_id sources
                 <>
                   <label className="flex items-center hover:text-[#00926c] cursor-pointer">
