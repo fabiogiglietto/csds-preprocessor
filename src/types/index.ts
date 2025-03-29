@@ -45,26 +45,41 @@ export interface MetaContentLibraryRow {
     text: string;
 }
 
-export interface TikTokResearchRow {
-    video_id: number;
-    author_name: string;
-    view_count: number;
-    comment_count: number;
-    share_count: number;
-    like_count: number;
-    region_code: string;
-    create_time: string;
-    effect_ids: number | string;
-    music_id: number | string;
-    video_description: string;
-    hashtag_names: string;
-    voice_to_text: string;
-    video_url: string;
-}
-
 export interface CSDSRow {
     account_id: string;
-    content_id: number | string;
+    content_id: string;
     object_id: string;
     timestamp_share: number;
+}
+
+export interface YouTubeDataToolsRow {
+    position: number;
+    channelId: string;
+    channelTitle: string;
+    videoId: string;
+    publishedAt: string;
+    publishedAtSQL: string;
+    videoTitle: string;
+    videoDescription: string;
+    tags: string;
+    videoCategoryId: number;
+    videoCategoryLabel: string;
+    topicCategories: string;
+    duration: string;
+    durationSec: number;
+    dimension: string;
+    definition: string;
+    caption: boolean;
+    defaultLanguage: string;
+    defaultLAudioLanguage: string;
+    thumbnail_maxres: string;
+    licensedContent: number;
+    locationDescription: string;
+    latitude: string;
+    longitude: string;
+    viewCount: number;
+    likeCount: number;
+    dislikeCount: string;
+    favoriteCount: number;
+    commentCount: number;
 }
