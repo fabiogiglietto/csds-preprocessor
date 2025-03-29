@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Apply base font and background */
+body {
+  font-family: 'Comfortaa', cursive;
+  @apply bg-gradient-to-b from-gray-100 to-gray-200 text-[#3d3d3c]; /* Match gradient in App.tsx for consistency */
+}
+
+/* Optional: Slightly customize focus rings for better visibility */
+@layer base {
+  *:focus-visible {
+     @apply outline-none ring-2 ring-offset-2 ring-[#00926c]/80; /* Theme color focus ring */
+  }
+}
+
+/* Styling for the file input label to look more like a button/dropzone */
+/* (Achieved mostly via Tailwind in App.tsx now, this might not be needed) */
