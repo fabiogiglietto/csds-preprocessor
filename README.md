@@ -13,9 +13,12 @@ This work was carried out in the context of the [VERA.AI project](https://veraai
   - BlueSky (via Communalytic)
   - Telegram
 - Platform-specific data mapping options
-- Handles file size limitations (15MB max for CSDS)
-- Provides feedback on processed and skipped rows
+- Advanced file size handling:
+  - Automatic file splitting for large datasets (>15MB)
+  - Time-based splitting (weekly, monthly, quarterly)
+  - Stratified sampling to maintain account distribution
 - Client-side processing (no data is sent to any server)
+- Detailed processing feedback with counts of processed and skipped rows
 
 ## Input Formats
 
@@ -74,6 +77,14 @@ Regardless of the input source, the tool generates a standardized CSV file with 
 - `object_id`: Content identifier (text, link, description, etc. based on selected option)
 - `timestamp_share`: UNIX timestamp of the content creation
 
+## File Size Management
+
+The CSDS service has a 15MB file size limit. For datasets that exceed this limit, the tool offers three options:
+
+1. **Split Into Multiple Files**: Automatically divides your data into multiple files under 15MB each and packages them in a ZIP archive.
+2. **Split By Time Period**: Divides data into separate files by time periods (weekly, monthly, or quarterly) for more focused analysis.
+3. **Sample Data**: Creates a representative sample while maintaining account distribution. You can adjust the sample size percentage.
+
 ## Usage
 
 1. Visit [https://fabiogiglietto.github.io/csds-preprocessor/](https://fabiogiglietto.github.io/csds-preprocessor/)
@@ -81,7 +92,8 @@ Regardless of the input source, the tool generates a standardized CSV file with 
 3. Choose the account source field based on your platform
 4. Select the object_id source field based on your platform and needs
 5. Upload your CSV file
-6. Download the transformed CSV file ready for the [Coordinated Sharing Detection Service](https://coortweet.lab.atc.gr/) powered by [CooRTweet](https://github.com/nicolarighetti/CooRTweet)
+6. If the file exceeds 15MB, select a file size management option
+7. Download the transformed CSV file(s) ready for the [Coordinated Sharing Detection Service](https://coortweet.lab.atc.gr/) powered by [CooRTweet](https://github.com/nicolarighetti/CooRTweet)
 
 ## Development
 
@@ -90,6 +102,7 @@ Built with:
 - Vite
 - TailwindCSS
 - Papa Parse for CSV handling
+- JSZip for file compression
 
 ### Local Development
 
