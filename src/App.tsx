@@ -412,19 +412,18 @@ function App() {
                     onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
                     className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c] border-gray-300"
                   />
-                   {platform === 'bluesky' ? 'BlueSky' : platform.charAt(0).toUpperCase() + platform.slice(1)}
-                   {platform === 'bluesky' && <span className="text-xs ml-1 opacity-70">(Communalytic)</span>}
+                   {platform.charAt(0).toUpperCase() + platform.slice(1)}
                 </label>
               ))}
             </div>
              {/* Links moved below platform selection */}
              <div className="mt-4 text-xs text-gray-500 space-x-2">
                   <span>Input sources:</span>
-                  <a href="https://developers.facebook.com/docs/content-library-and-api/content-library" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Meta</a>,
+                  <a href="https://developers.facebook.com/docs/content-library-and-api/content-library" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Meta Content Library</a>,
                   <a href="https://developers.tiktok.com/products/research-api/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">TikTok</a>,
                   <a href="https://communalytic.org/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">BlueSky (via Communalytic)</a>,
-                  <a href="https://ytdt.digitalmethods.net/mod_videos_list.php" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">YouTube</a>,
-                  <a href="https://telegram.org/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Telegram</a>
+                  <a href="https://ytdt.digitalmethods.net/mod_videos_list.php" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">YouTube (via YouTube Data Tools)</a>,
+                  <a href="https://core.telegram.org/#telegram-api" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Telegram</a>
                   <span>→</span>
                   <a href="https://coortweet.lab.atc.gr/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CSDS (CooRTweet)</a>
              </div>
