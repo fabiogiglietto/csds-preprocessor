@@ -180,6 +180,7 @@ function App() {
     setFileName(file.name);
     resetState(true); // Reset previous results, keep selections
     setIsLoading(true);
+    setFeedbackMessage({type: 'info', text: 'Starting file processing...'}) // Initial feedback
 
     if (!sourceType || !accountSource || !objectIdSource) {
       setFeedbackMessage({ type: 'error', text: 'Please ensure all selections (Platform, Account Source, Object ID Source) are made before uploading.' });
@@ -194,249 +195,234 @@ function App() {
       dynamicTyping: false, // Treat all as strings initially
       skipEmptyLines: true,
       complete: (results) => {
-        setIsLoading(true); // Ensure loading stays true during processing
-        try {
-          let skipped = 0;
-          const headers = results.meta?.fields;
+        // Wrap the potentially long processing in a setTimeout to allow UI to update with "isLoading"
+        setTimeout(() => {
+            try {
+              let skipped = 0;
+              const headers = results.meta?.fields;
 
-          if (!headers || results.data.length === 0) {
-            setFeedbackMessage({ type: 'error', text: 'The CSV file appears to be empty or does not contain header rows.' });
-            setIsLoading(false);
-            return;
-          }
-
-          // --- Header Validation ---
-          const getRequiredHeaders = (): string[] => { // Made return type explicit
-              if (!sourceType || !accountSource || !objectIdSource) return []; // Should not happen due to earlier check
-              if (sourceType === 'youtube') return ['videoId', 'channelTitle', 'channelId', 'publishedAt', objectIdSource];
-              if (sourceType === 'bluesky') return ['id', 'date', 'username', 'text'];
-              if (sourceType === 'tiktok') return ['video_id', 'author_name', 'create_time', objectIdSource];
-              if (sourceType === 'telegram') {
-                  const accountFields = accountSource === 'telegram_channel' ? ['channel_name', 'channel_id'] : ['post_author', 'sender_id'];
-                  return ['message_id', 'date', 'message_text', ...accountFields];
+              if (!headers || results.data.length === 0) {
+                setFeedbackMessage({ type: 'error', text: 'The CSV file appears to be empty or does not contain header rows.' });
+                setIsLoading(false);
+                return;
               }
-              // FB/Insta
-              const accountIdField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
-              const accountNameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
-              const objectField = objectIdSource === 'text' ? 'text' : (sourceType === 'facebook' ? 'link_attachment.link' : '');
-              return ['id', 'creation_time', accountIdField, accountNameField, objectField].filter(h => !!h); // Ensure boolean check is robust
-          };
 
-          const requiredHeaders = getRequiredHeaders();
-          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+              // --- Header Validation ---
+              const getRequiredHeaders = (): string[] => {
+                  if (!sourceType || !accountSource || !objectIdSource) return [];
+                  if (sourceType === 'youtube') return ['videoId', 'channelTitle', 'channelId', 'publishedAt', objectIdSource];
+                  if (sourceType === 'bluesky') return ['id', 'date', 'username', 'text'];
+                  if (sourceType === 'tiktok') return ['video_id', 'author_name', 'create_time', objectIdSource];
+                  if (sourceType === 'telegram') {
+                      const accountFields = accountSource === 'telegram_channel' ? ['channel_name', 'channel_id'] : ['post_author', 'sender_id'];
+                      return ['message_id', 'date', 'message_text', ...accountFields];
+                  }
+                  const accountIdField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                  const accountNameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                  const objectField = objectIdSource === 'text' ? 'text' : (sourceType === 'facebook' ? 'link_attachment.link' : '');
+                  return ['id', 'creation_time', accountIdField, accountNameField, objectField].filter(h => !!h);
+              };
 
-          if (missingHeaders.length > 0) {
-              setFeedbackMessage({ type: 'error', text: `Missing required columns in CSV: ${missingHeaders.join(', ')}. Please check the file and your selections.` });
-              setIsLoading(false);
-              return;
-          }
+              const requiredHeaders = getRequiredHeaders();
+              const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
 
-          // --- Row Transformation & Validation ---
-          const transformed: CSDSRow[] = results.data
-            .map((row: any, index: number): CSDSRow | null => {
-                let isValid = false;
-                let accountIdVal: string | number | undefined;
-                let contentIdVal: string | number | undefined;
-                let timestampVal: string | number | undefined;
-                let objectIdSourceVal: any;
-                let accountName: string | undefined; // For display name construction
+              if (missingHeaders.length > 0) {
+                  setFeedbackMessage({ type: 'error', text: `Missing required columns in CSV: ${missingHeaders.join(', ')}. Please check the file and your selections.` });
+                  setIsLoading(false);
+                  return;
+              }
 
-                try {
-                    // Extract platform-specific raw values
-                    if (sourceType === 'telegram') {
-                        contentIdVal = row.message_id;
-                        timestampVal = row.date;
-                        objectIdSourceVal = row.message_text;
-                        if (accountSource === 'telegram_channel') {
-                            accountIdVal = row.channel_id;
-                            accountName = row.channel_name;
-                        } else { // telegram_author
-                            accountIdVal = row.sender_id;
-                            accountName = row.post_author;
-                        }
-                        // Basic check for presence
-                        isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && (objectIdSourceVal !== undefined && objectIdSourceVal !== null));
-                    } else if (sourceType === 'youtube') {
-                        accountIdVal = row.channelId;
-                        accountName = row.channelTitle;
-                        contentIdVal = row.videoId;
-                        timestampVal = row.publishedAt;
-                        objectIdSourceVal = row[objectIdSource!]; // Assume objectIdSource is set
-                        isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
-                    } else if (sourceType === 'bluesky') {
-                        accountIdVal = row.username; // Username is the ID here
-                        accountName = row.username;
-                        contentIdVal = row.id;
-                        timestampVal = row.date;
-                        objectIdSourceVal = row.text;
-                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
-                    } else if (sourceType === 'tiktok') {
-                        accountIdVal = row.author_name; // Using name as part of ID base
-                        accountName = row.author_name;
-                        contentIdVal = row.video_id;
-                        timestampVal = row.create_time;
-                        objectIdSourceVal = row[objectIdSource!]; // Assume objectIdSource is set
-                        const isPotentiallyEmptyField = ['effect_ids', 'music_id'].includes(objectIdSource!);
-                        const checkObjectId = isPotentiallyEmptyField
-                            ? (objectIdSourceVal !== undefined && objectIdSourceVal !== null) // Presence is enough
-                            : (objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== ''); // Must be non-empty string otherwise
-                        isValid = Boolean(accountName && contentIdVal && timestampVal && checkObjectId);
-                    } else { // Facebook / Instagram
-                        const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
-                        const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
-                        accountIdVal = row[idField];
-                        accountName = row[nameField];
-                        contentIdVal = row.id;
-                        timestampVal = row.creation_time;
-                        objectIdSourceVal = (objectIdSource === 'text') ? row.text : (sourceType === 'facebook' ? row['link_attachment.link'] : undefined); // Handle Instagram link case
-                        isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
-                    }
+              // --- Row Transformation & Validation ---
+              const transformed: CSDSRow[] = results.data
+                .map((row: any, index: number): CSDSRow | null => {
+                    let isValid = false;
+                    let accountIdVal: string | number | undefined;
+                    let contentIdVal: string | number | undefined;
+                    let timestampVal: string | number | undefined;
+                    let objectIdSourceVal: any;
+                    let accountName: string | undefined;
 
-                    if (!isValid) { throw new Error("Missing required fields in row data."); }
-
-                    // --- Perform Transformation ---
-                    let finalAccountId = '';
-                    let finalContentId = String(contentIdVal);
-                    let finalObjectId = '';
-                    let finalTimestamp = 0;
-
-                    // Process Timestamp (Centralized and Robust)
                     try {
-                        let parsedTimestamp: number | null = null;
-                        if (typeof timestampVal === 'number') {
-                            // Check if it looks like milliseconds (common from JS Date.getTime())
-                            if (timestampVal > 100000000000) { // Heuristic: timestamp likely in ms if > ~Sept 2001
-                                parsedTimestamp = Math.floor(timestampVal / 1000);
-                            } else { // Assume seconds
-                                parsedTimestamp = timestampVal;
+                        // Extract platform-specific raw values
+                        if (sourceType === 'telegram') {
+                            contentIdVal = row.message_id;
+                            timestampVal = row.date;
+                            objectIdSourceVal = row.message_text;
+                            if (accountSource === 'telegram_channel') {
+                                accountIdVal = row.channel_id;
+                                accountName = row.channel_name;
+                            } else { // telegram_author
+                                accountIdVal = row.sender_id;
+                                accountName = row.post_author;
                             }
-                        } else if (typeof timestampVal === 'string') {
-                           const date = new Date(timestampVal);
-                           if (!isNaN(date.getTime())) {
-                               parsedTimestamp = Math.floor(date.getTime() / 1000);
-                           } else {
-                               // Try parsing as number (might be stringified timestamp)
-                               const numVal = Number(timestampVal);
-                               if (!isNaN(numVal) && numVal > 0) {
-                                    if (numVal > 100000000000) {
-                                        parsedTimestamp = Math.floor(numVal / 1000);
-                                    } else {
-                                        parsedTimestamp = numVal;
-                                    }
+                            isValid = !!(accountIdVal && accountName && contentIdVal && timestampVal && (objectIdSourceVal !== undefined && objectIdSourceVal !== null));
+                        } else if (sourceType === 'youtube') {
+                            accountIdVal = row.channelId;
+                            accountName = row.channelTitle;
+                            contentIdVal = row.videoId;
+                            timestampVal = row.publishedAt;
+                            objectIdSourceVal = row[objectIdSource!];
+                            isValid = !!(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
+                        } else if (sourceType === 'bluesky') {
+                            accountIdVal = row.username;
+                            accountName = row.username;
+                            contentIdVal = row.id;
+                            timestampVal = row.date;
+                            objectIdSourceVal = row.text;
+                            isValid = !!(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
+                        } else if (sourceType === 'tiktok') {
+                            accountIdVal = row.author_name; // Using name as part of ID base
+                            accountName = row.author_name;
+                            contentIdVal = row.video_id;
+                            timestampVal = row.create_time;
+                            objectIdSourceVal = row[objectIdSource!];
+                            const isPotentiallyEmptyField = ['effect_ids', 'music_id'].includes(objectIdSource!);
+                            const checkObjectId = isPotentiallyEmptyField
+                                ? (objectIdSourceVal !== undefined && objectIdSourceVal !== null)
+                                : (objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
+                            isValid = !!(accountName && contentIdVal && timestampVal && checkObjectId);
+                        } else { // Facebook / Instagram
+                            const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                            const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                            accountIdVal = row[idField];
+                            accountName = row[nameField];
+                            contentIdVal = row.id;
+                            timestampVal = row.creation_time;
+                            objectIdSourceVal = (objectIdSource === 'text') ? row.text : (sourceType === 'facebook' ? row['link_attachment.link'] : undefined);
+                            isValid = !!(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
+                        }
+
+                        if (!isValid) { throw new Error("Missing required fields in row data."); }
+
+                        // --- Perform Transformation ---
+                        let finalAccountId = '';
+                        let finalContentId = String(contentIdVal);
+                        let finalObjectId = '';
+                        let finalTimestamp = 0;
+
+                        // Process Timestamp
+                        try {
+                            let parsedTimestamp: number | null = null;
+                            if (typeof timestampVal === 'number') {
+                                if (timestampVal > 100000000000) { // ms
+                                    parsedTimestamp = Math.floor(timestampVal / 1000);
+                                } else { // seconds
+                                    parsedTimestamp = timestampVal;
+                                }
+                            } else if (typeof timestampVal === 'string') {
+                               const date = new Date(timestampVal);
+                               if (!isNaN(date.getTime())) {
+                                   parsedTimestamp = Math.floor(date.getTime() / 1000);
                                } else {
-                                   throw new Error('Invalid date format string');
+                                   const numVal = Number(timestampVal);
+                                   if (!isNaN(numVal) && numVal > 0) {
+                                        if (numVal > 100000000000) { // stringified ms
+                                            parsedTimestamp = Math.floor(numVal / 1000);
+                                        } else { // stringified seconds
+                                            parsedTimestamp = numVal;
+                                        }
+                                   } else { throw new Error('Invalid date format string'); }
                                }
-                           }
+                            } else { throw new Error('Missing or invalid timestamp type'); }
+
+                            if (parsedTimestamp === null || parsedTimestamp <= 0) { throw new Error('Timestamp resulted in zero, negative, or null value'); }
+                            finalTimestamp = parsedTimestamp;
+                        } catch (timeError) {
+                            throw new Error(`Timestamp error: ${timeError instanceof Error ? timeError.message : String(timeError)} (Raw: ${timestampVal})`);
+                        }
+
+                        // Construct Final Account ID
+                        const safeAccountName = String(accountName || '').trim();
+                        const safeAccountIdVal = String(accountIdVal || '').trim();
+
+                        if (sourceType === 'telegram' || sourceType === 'youtube' || sourceType === 'facebook' || sourceType === 'instagram') {
+                             if (!safeAccountName || !safeAccountIdVal) throw new Error(`Missing ${sourceType} name or ID`);
+                             finalAccountId = `${safeAccountName} (${safeAccountIdVal})`;
+                        } else if (sourceType === 'bluesky') {
+                            finalAccountId = safeAccountIdVal; // Just username
+                            if (!finalAccountId) throw new Error("Missing Bluesky username");
+                        } else if (sourceType === 'tiktok') {
+                            if (!safeAccountName) throw new Error("Missing TikTok author name");
+                            finalAccountId = `${safeAccountName} (${row.region_code || 'unknown'})`;
                         } else {
-                           throw new Error('Missing or invalid timestamp type');
+                            throw new Error("Unhandled source type for account ID");
                         }
 
-                        if (parsedTimestamp === null || parsedTimestamp <= 0) {
-                            throw new Error('Timestamp resulted in zero, negative, or null value');
-                        }
-                         finalTimestamp = parsedTimestamp;
+                        // Construct Final Object ID
+                         finalObjectId = (objectIdSourceVal !== undefined && objectIdSourceVal !== null)
+                            ? (typeof objectIdSourceVal === 'string' ? objectIdSourceVal : String(objectIdSourceVal))
+                            : '';
 
-                    } catch (timeError) {
-                        // Throw a more specific error to aid debugging
-                        throw new Error(`Timestamp processing failed: ${timeError instanceof Error ? timeError.message : String(timeError)} (Raw value: ${timestampVal})`);
+                        // Final Validation
+                        if (!finalAccountId.trim()) throw new Error('Generated Account ID is empty');
+                        if (!finalContentId.trim()) throw new Error('Generated Content ID is empty');
+                        if (finalTimestamp <= 0) throw new Error('Generated Timestamp is invalid');
+
+                        return {
+                            account_id: finalAccountId,
+                            content_id: finalContentId,
+                            object_id: finalObjectId,
+                            timestamp_share: finalTimestamp
+                        };
+
+                    } catch (error) {
+                         console.warn(`Skipping row ${index + 1} (Error):`, error instanceof Error ? error.message : String(error), { rawRow: row });
+                         skipped++;
+                         return null;
                     }
+                })
+                .filter((row): row is CSDSRow => row !== null);
 
-                    // Construct Final Account ID (Name + ID format where applicable)
-                    if (sourceType === 'telegram' || sourceType === 'youtube' || sourceType === 'facebook' || sourceType === 'instagram') {
-                         // Ensure accountName and accountIdVal are strings for safety
-                         const namePart = String(accountName || '').trim();
-                         const idPart = String(accountIdVal || '').trim();
-                         if (!namePart || !idPart) throw new Error("Missing name or ID for account construction");
-                         finalAccountId = `${namePart} (${idPart})`;
-                    } else if (sourceType === 'bluesky') {
-                        finalAccountId = String(accountIdVal || '').trim(); // Just username
-                        if (!finalAccountId) throw new Error("Missing username for Bluesky account");
-                    } else if (sourceType === 'tiktok') {
-                        const namePart = String(accountName || '').trim();
-                        if (!namePart) throw new Error("Missing author name for TikTok account");
-                        finalAccountId = `${namePart} (${row.region_code || 'unknown'})`;
-                    } else {
-                        throw new Error("Unhandled source type for account ID construction");
-                    }
+              setSkippedRows(skipped);
+              setProcessedRows(transformed.length);
 
+              if (transformed.length === 0) {
+                setFeedbackMessage({ type: 'error', text: `No valid data rows could be processed from ${fileName}. Check column names, content requirements, and selections. ${skipped > 0 ? `(${skipped} rows skipped)` : ''}` });
+                setIsLoading(false);
+                return;
+              }
 
-                    // Construct Final Object ID
-                    if (objectIdSourceVal !== undefined && objectIdSourceVal !== null) {
-                        finalObjectId = typeof objectIdSourceVal === 'string' ? objectIdSourceVal : String(objectIdSourceVal);
-                    } // Allow empty string if value was present but empty
+              // Calculate size and determine strategy options
+              const csvContent = Papa.unparse(transformed);
+              const totalSize = new Blob([csvContent]).size;
+              const totalSizeMB = totalSize / BYTES_PER_MB;
 
-                    // Final Validation of generated fields before returning
-                    if (!finalAccountId.trim()) throw new Error('Generated Account ID is empty');
-                    if (!finalContentId.trim()) throw new Error('Generated Content ID is empty');
-                    // finalObjectId can be empty, that's allowed by CSDS
-                    if (finalTimestamp <= 0) throw new Error('Generated Timestamp is invalid');
+              setTransformedData(transformed);
+              setEstimatedSizeMB(totalSizeMB);
 
+              if (totalSizeMB > CSDS_SIZE_LIMIT_MB) {
+                const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES));
+                const targetRowSizeBytes = totalSize / transformed.length; // Avg row size
+                const calculatedSampleSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE_BYTES / targetRowSizeBytes));
 
-                    return {
-                        account_id: finalAccountId,
-                        content_id: finalContentId,
-                        object_id: finalObjectId,
-                        timestamp_share: finalTimestamp
-                    };
+                setMinSplitParts(calculatedMinChunks);
+                setSuggestedSampleSize(calculatedSampleSize);
+                setSplitParts(calculatedMinChunks);
+                setSampleSize(calculatedSampleSize);
+                setLargeFileStrategy(null);
+                setSampleType(null);
+                setNumChunks(calculatedMinChunks);
 
-                } catch (error) {
-                     console.warn(`Skipping row ${index + 1} (Transformation Error):`, error instanceof Error ? error.message : String(error), { rawRow: row });
-                     skipped++;
-                     return null;
-                }
-            })
-            .filter((row): row is CSDSRow => row !== null);
+                setFeedbackMessage({
+                    type: 'warning',
+                    text: `Processed ${transformed.length} rows (${skipped} skipped). The output file is ${totalSizeMB.toFixed(1)}MB, exceeding the CSDS ${CSDS_SIZE_LIMIT_MB}MB limit. Please choose a strategy below.`
+                });
+              } else {
+                setNumChunks(1);
+                setLargeFileStrategy(null);
+                setFeedbackMessage({
+                    type: 'success',
+                    text: `Successfully processed ${transformed.length} rows from ${fileName} (${skipped} skipped). File size is ${totalSizeMB.toFixed(1)}MB. Ready for download.`
+                });
+              }
 
-
-          setSkippedRows(skipped);
-          setProcessedRows(transformed.length);
-
-          if (transformed.length === 0) {
-            setFeedbackMessage({ type: 'error', text: `No valid data rows could be processed from ${fileName}. Check column names, content requirements, and selections. ${skipped > 0 ? `(${skipped} rows skipped)` : ''}` });
-            setIsLoading(false);
-            return;
-          }
-
-          // Calculate size and determine strategy options
-          const csvContent = Papa.unparse(transformed);
-          const totalSize = new Blob([csvContent]).size;
-          const totalSizeMB = totalSize / BYTES_PER_MB;
-
-          setTransformedData(transformed); // Store full data
-          setEstimatedSizeMB(totalSizeMB); // Store size
-
-          if (totalSizeMB > CSDS_SIZE_LIMIT_MB) {
-            const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES)); // Ensure at least 2 chunks
-            const targetRowSizeBytes = totalSize / transformed.length;
-            const calculatedSampleSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE_BYTES / targetRowSizeBytes));
-
-            setMinSplitParts(calculatedMinChunks);
-            setSuggestedSampleSize(calculatedSampleSize);
-            setSplitParts(calculatedMinChunks); // Default to minimum required
-            setSampleSize(calculatedSampleSize); // Default to suggested size
-            setLargeFileStrategy(null); // Force user choice
-            setSampleType(null);
-            setNumChunks(calculatedMinChunks);
-
-            setFeedbackMessage({
-                type: 'warning',
-                text: `Processed ${transformed.length} rows (${skipped} skipped). The output file is ${totalSizeMB.toFixed(1)}MB, exceeding the CSDS ${CSDS_SIZE_LIMIT_MB}MB limit. Please choose a strategy below.`
-            });
-          } else {
-            setNumChunks(1);
-            setLargeFileStrategy(null); // Not needed
-            setFeedbackMessage({
-                type: 'success',
-                text: `Successfully processed ${transformed.length} rows from ${fileName} (${skipped} skipped). File size is ${totalSizeMB.toFixed(1)}MB. Ready for download.`
-            });
-          }
-
-        } catch (err) {
-          console.error('Overall processing error:', err);
-          setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
-        } finally {
-          setIsLoading(false); // Ensure loading is turned off
-        }
+            } catch (err) {
+              console.error('Overall processing error:', err);
+              setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
+            } finally {
+              setIsLoading(false);
+            }
+        }, 10); // setTimeout ensures loading spinner renders before potentially blocking CPU
       },
       error: (error: Papa.ParseError) => {
         console.error('PapaParse error:', error);
@@ -489,17 +475,15 @@ function App() {
       case 'even':
         const step = Math.max(1, dataToSample.length / finalSampleSize);
         const sampled: CSDSRow[] = [];
-        // Ensure indices are within bounds and unique if step is ~1
         const indices = new Set<number>();
         for (let i = 0; sampled.length < finalSampleSize; i++) {
             const index = Math.floor(i * step);
             if (index >= dataToSample.length) break;
-            if (!indices.has(index)) { // Avoid duplicates if step is small
+            if (!indices.has(index)) {
                 sampled.push(dataToSample[index]);
                 indices.add(index);
             }
-            // Safety break if step somehow becomes 0 or infinite loop
-            if (i > dataToSample.length * 2) break;
+            if (i > dataToSample.length * 2) break; // Safety break
         }
         return sampled;
       default: return null;
@@ -521,7 +505,7 @@ function App() {
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const downloadFilename = `${baseFilename}_${suffix}.csv`;
             triggerDownload(blob, downloadFilename);
-            setFeedbackMessage({ type: 'success', text: `Download initiated for ${suffix}.` });
+            setFeedbackMessage({ type: 'success', text: `Download initiated for ${suffix}. Check your browser downloads.` });
         } catch (error) {
             console.error(`Error during ${suffix} download:`, error);
             setFeedbackMessage({ type: 'error', text: `Failed to generate CSV for ${suffix}: ${error instanceof Error ? error.message : 'Unknown error'}` });
@@ -535,7 +519,7 @@ function App() {
   const handleDownloadSample = () => {
      const base = `${sourceType || 'data'}_csds`;
      const suffix = `${sampleType}_sample_${sampleSize}rows_${new Date().toISOString().slice(0, 10)}`;
-     downloadData(getSampledData, base, suffix, `Generating ${sampleType} sample (${sampleSize} rows)...`);
+     downloadData(getSampledData, base, suffix, `Generating ${sampleType} sample (${sampleSize.toLocaleString()} rows)...`);
   };
 
   const handleDownloadSplitUser = () => {
@@ -547,47 +531,55 @@ function App() {
     setIsLoading(true);
     setFeedbackMessage({ type: 'info', text: `Preparing ${splitParts} files...` });
 
-    setTimeout(async () => { // Make async to potentially await between downloads
-      try {
-        if (!transformedData || transformedData.length === 0) throw new Error("No transformed data available for splitting.");
+    // Use async/await with a delay between downloads to potentially help browsers
+    const downloadChunksSequentially = async () => {
+        try {
+            if (!transformedData || transformedData.length === 0) throw new Error("No transformed data available for splitting.");
 
-        const headerString = Papa.unparse([transformedData[0]], { header: true }).split('\r\n')[0];
-        if (!headerString) throw new Error("Failed to generate CSV header.");
+            // Get header row safely
+            const headerResult = Papa.unparse([transformedData[0]], { header: true });
+            const headerString = headerResult.includes('\r\n') ? headerResult.split('\r\n')[0] : headerResult.split('\n')[0]; // Handle different line endings
+            if (!headerString) throw new Error("Failed to generate CSV header.");
 
-        const baseFilename = `${sourceType || 'data'}_csds_ready_${new Date().toISOString().slice(0, 10)}`;
-        const totalRows = transformedData.length;
-        const rowsPerChunk = Math.ceil(totalRows / splitParts);
+            const baseFilename = `${sourceType || 'data'}_csds_ready_${new Date().toISOString().slice(0, 10)}`;
+            const totalRows = transformedData.length;
+            const rowsPerChunk = Math.ceil(totalRows / splitParts);
 
-        let downloadsInitiated = 0;
-        for (let i = 0; i < splitParts; i++) {
-            const startIndex = i * rowsPerChunk;
-            const endIndex = startIndex + rowsPerChunk;
-            const chunkData = transformedData.slice(startIndex, endIndex);
+            let downloadsInitiated = 0;
+            for (let i = 0; i < splitParts; i++) {
+                const startIndex = i * rowsPerChunk;
+                const endIndex = startIndex + rowsPerChunk;
+                const chunkData = transformedData.slice(startIndex, endIndex);
 
-            if (chunkData.length > 0) {
-                const chunkCsvString = Papa.unparse(chunkData, { header: false });
-                const fullChunkContent = headerString + '\r\n' + chunkCsvString;
-                const chunkBlob = new Blob([fullChunkContent], { type: 'text/csv;charset=utf-8;' });
-                const chunkFilename = `${baseFilename}_part_${i + 1}_of_${splitParts}.csv`;
-                triggerDownload(chunkBlob, chunkFilename);
-                downloadsInitiated++;
-                 // Optional delay if needed (e.g., if browser throttles rapid downloads)
-                 // await new Promise(resolve => setTimeout(resolve, 250));
+                if (chunkData.length > 0) {
+                    const chunkCsvString = Papa.unparse(chunkData, { header: false });
+                    const fullChunkContent = headerString + '\r\n' + chunkCsvString; // Use CRLF consistently
+                    const chunkBlob = new Blob([fullChunkContent], { type: 'text/csv;charset=utf-8;' });
+                    const chunkFilename = `${baseFilename}_part_${i + 1}_of_${splitParts}.csv`;
+
+                    triggerDownload(chunkBlob, chunkFilename);
+                    downloadsInitiated++;
+
+                    setFeedbackMessage({ type: 'info', text: `Initiating download for part ${i + 1} of ${splitParts}...` });
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
             }
+            setFeedbackMessage({ type: 'success', text: `Initiated download for ${downloadsInitiated} split files. Check your browser downloads.` });
+        } catch (error) {
+            console.error("Error during split download:", error);
+            setFeedbackMessage({ type: 'error', text: `Failed to prepare split files: ${error instanceof Error ? error.message : 'Unknown error'}` });
+        } finally {
+            setIsLoading(false);
         }
-        setFeedbackMessage({ type: 'success', text: `Initiated download for ${downloadsInitiated} split files.` });
-      } catch (error) {
-        console.error("Error during split download:", error);
-        setFeedbackMessage({ type: 'error', text: `Failed to prepare split files: ${error instanceof Error ? error.message : 'Unknown error'}` });
-      } finally {
-        setIsLoading(false);
-      }
-    }, 50);
-  };
+    };
+
+    downloadChunksSequentially(); // Start the sequential download process
+
+};
+
 
   const handleDownloadProceedAnyway = () => {
       const base = `${sourceType || 'data'}_csds_ready`;
-      // Provide reference to the original full data array
       downloadData(() => transformedData, base, `FULL_${estimatedSizeMB.toFixed(1)}MB_${new Date().toISOString().slice(0, 10)}`, `Preparing full ${estimatedSizeMB.toFixed(1)}MB file...`);
   };
 
@@ -597,6 +589,9 @@ function App() {
     };
 
   const handleFinalDownload = () => {
+    // Prevent action if already loading
+    if (isLoading) return;
+
     if (estimatedSizeMB <= CSDS_SIZE_LIMIT_MB && transformedData) {
         handleDownloadSingle();
         return;
@@ -613,14 +608,16 @@ function App() {
   };
 
   const isDownloadStrategyReady = (): boolean => {
-    if (isLoading) return false;
-    if (estimatedSizeMB <= CSDS_SIZE_LIMIT_MB && transformedData) return true;
-    if (!largeFileStrategy) return false;
+    if (isLoading) return false; // Always disable if loading
+    if (!transformedData) return false; // Disable if no data
+
+    if (estimatedSizeMB <= CSDS_SIZE_LIMIT_MB) return true; // Ready if small file
+    if (!largeFileStrategy) return false; // Must select a strategy if large
 
     switch (largeFileStrategy) {
-      case 'sample': return !!sampleType && sampleSize > 0 && sampleSize <= (transformedData?.length || 0);
+      case 'sample': return !!sampleType && sampleSize > 0 && sampleSize <= transformedData.length;
       case 'split': return splitParts >= minSplitParts;
-      case 'proceed': return true;
+      case 'proceed': return true; // Just selecting is enough
       default: return false;
     }
   };
@@ -631,8 +628,9 @@ function App() {
   const step4Enabled = step3Enabled && !!objectIdSource;
 
   const getStepClasses = (enabled: boolean) => {
-    // Apply pointer-events-none only if not enabled AND not currently loading (allow interaction with inputs while loading if needed)
-     return `bg-gray-50 rounded-lg p-4 sm:p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50 ' + (!isLoading ? 'pointer-events-none' : '')}`;
+     // Allow interaction even if step logically follows a disabled one,
+     // but rely on input `disabled` state controlled by `isLoading` or specific logic.
+     return `bg-gray-50 rounded-lg p-4 sm:p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`;
   };
 
   // --- Render ---
@@ -644,9 +642,9 @@ function App() {
             <h1 className="text-2xl sm:text-3xl font-bold text-center">
             CSDS Pre-processor
             </h1>
-            {/* CORRECTED LINE BELOW */}
+            {/* CORRECTED LINE WITH > */}
             <p className="mt-2 text-center text-xs sm:text-sm opacity-90 max-w-3xl mx-auto">
-                 Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. Handles large files (&gt;{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
+                 Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. Handles large files (>{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
             </p>
         </div>
 
@@ -958,7 +956,8 @@ function App() {
 
               {/* --- Final Download Button --- */}
               {/* Renders if file is small OR if a large file strategy is chosen */}
-              {(estimatedSizeMB <= CSDS_SIZE_LIMIT_MB || largeFileStrategy) && (
+              {/* Check if transformedData exists before rendering */}
+              {transformedData && (estimatedSizeMB <= CSDS_SIZE_LIMIT_MB || largeFileStrategy) && (
                 <button
                   onClick={handleFinalDownload} // Single handler determines action
                   className={`w-full flex justify-center items-center px-6 py-2.5 sm:px-8 sm:py-3 rounded-lg font-bold text-base sm:text-lg transition-colors duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2
