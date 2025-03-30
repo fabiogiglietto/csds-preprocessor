@@ -206,7 +206,7 @@ function App() {
           }
 
           // --- Header Validation ---
-          const getRequiredHeaders = () => {
+          const getRequiredHeaders = (): string[] => { // Made return type explicit
               if (!sourceType || !accountSource || !objectIdSource) return []; // Should not happen due to earlier check
               if (sourceType === 'youtube') return ['videoId', 'channelTitle', 'channelId', 'publishedAt', objectIdSource];
               if (sourceType === 'bluesky') return ['id', 'date', 'username', 'text'];
@@ -219,7 +219,7 @@ function App() {
               const accountIdField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
               const accountNameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
               const objectField = objectIdSource === 'text' ? 'text' : (sourceType === 'facebook' ? 'link_attachment.link' : '');
-              return ['id', 'creation_time', accountIdField, accountNameField, objectField].filter(Boolean);
+              return ['id', 'creation_time', accountIdField, accountNameField, objectField].filter(h => !!h); // Ensure boolean check is robust
           };
 
           const requiredHeaders = getRequiredHeaders();
@@ -254,13 +254,14 @@ function App() {
                             accountIdVal = row.sender_id;
                             accountName = row.post_author;
                         }
+                        // Basic check for presence
                         isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && (objectIdSourceVal !== undefined && objectIdSourceVal !== null));
                     } else if (sourceType === 'youtube') {
                         accountIdVal = row.channelId;
                         accountName = row.channelTitle;
                         contentIdVal = row.videoId;
                         timestampVal = row.publishedAt;
-                        objectIdSourceVal = row[objectIdSource!];
+                        objectIdSourceVal = row[objectIdSource!]; // Assume objectIdSource is set
                         isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
                     } else if (sourceType === 'bluesky') {
                         accountIdVal = row.username; // Username is the ID here
@@ -270,15 +271,15 @@ function App() {
                         objectIdSourceVal = row.text;
                         isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
                     } else if (sourceType === 'tiktok') {
-                        accountIdVal = row.author_name; // Use author_name as part of ID, no separate ID typically
+                        accountIdVal = row.author_name; // Using name as part of ID base
                         accountName = row.author_name;
                         contentIdVal = row.video_id;
                         timestampVal = row.create_time;
-                        objectIdSourceVal = row[objectIdSource!];
+                        objectIdSourceVal = row[objectIdSource!]; // Assume objectIdSource is set
                         const isPotentiallyEmptyField = ['effect_ids', 'music_id'].includes(objectIdSource!);
                         const checkObjectId = isPotentiallyEmptyField
-                            ? (objectIdSourceVal !== undefined && objectIdSourceVal !== null)
-                            : (objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
+                            ? (objectIdSourceVal !== undefined && objectIdSourceVal !== null) // Presence is enough
+                            : (objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== ''); // Must be non-empty string otherwise
                         isValid = Boolean(accountName && contentIdVal && timestampVal && checkObjectId);
                     } else { // Facebook / Instagram
                         const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
@@ -287,7 +288,7 @@ function App() {
                         accountName = row[nameField];
                         contentIdVal = row.id;
                         timestampVal = row.creation_time;
-                        objectIdSourceVal = (objectIdSource === 'text') ? row.text : row['link_attachment.link'];
+                        objectIdSourceVal = (objectIdSource === 'text') ? row.text : (sourceType === 'facebook' ? row['link_attachment.link'] : undefined); // Handle Instagram link case
                         isValid = Boolean(accountIdVal && accountName && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && String(objectIdSourceVal).trim() !== '');
                     }
 
@@ -299,45 +300,77 @@ function App() {
                     let finalObjectId = '';
                     let finalTimestamp = 0;
 
-                    // Process Timestamp
-                     try {
-                         if (typeof timestampVal === 'number' && timestampVal > 10000000000) { // Likely ms timestamp
-                            finalTimestamp = Math.floor(timestampVal / 1000);
-                         } else if (typeof timestampVal === 'number') { // Assume UNIX seconds
-                             finalTimestamp = timestampVal;
-                         } else if (typeof timestampVal === 'string') {
-                            const date = new Date(timestampVal);
-                            if (!isNaN(date.getTime())) {
-                                finalTimestamp = Math.floor(date.getTime() / 1000);
-                            } else { throw new Error('Invalid date format string'); }
-                         } else { throw new Error('Missing or invalid timestamp type'); }
-                         if (finalTimestamp <= 0) { throw new Error('Timestamp resulted in zero or negative'); }
+                    // Process Timestamp (Centralized and Robust)
+                    try {
+                        let parsedTimestamp: number | null = null;
+                        if (typeof timestampVal === 'number') {
+                            // Check if it looks like milliseconds (common from JS Date.getTime())
+                            if (timestampVal > 100000000000) { // Heuristic: timestamp likely in ms if > ~Sept 2001
+                                parsedTimestamp = Math.floor(timestampVal / 1000);
+                            } else { // Assume seconds
+                                parsedTimestamp = timestampVal;
+                            }
+                        } else if (typeof timestampVal === 'string') {
+                           const date = new Date(timestampVal);
+                           if (!isNaN(date.getTime())) {
+                               parsedTimestamp = Math.floor(date.getTime() / 1000);
+                           } else {
+                               // Try parsing as number (might be stringified timestamp)
+                               const numVal = Number(timestampVal);
+                               if (!isNaN(numVal) && numVal > 0) {
+                                    if (numVal > 100000000000) {
+                                        parsedTimestamp = Math.floor(numVal / 1000);
+                                    } else {
+                                        parsedTimestamp = numVal;
+                                    }
+                               } else {
+                                   throw new Error('Invalid date format string');
+                               }
+                           }
+                        } else {
+                           throw new Error('Missing or invalid timestamp type');
+                        }
+
+                        if (parsedTimestamp === null || parsedTimestamp <= 0) {
+                            throw new Error('Timestamp resulted in zero, negative, or null value');
+                        }
+                         finalTimestamp = parsedTimestamp;
+
                     } catch (timeError) {
-                        throw new Error(`Timestamp error: ${timeError instanceof Error ? timeError.message : timeError}`);
+                        // Throw a more specific error to aid debugging
+                        throw new Error(`Timestamp processing failed: ${timeError instanceof Error ? timeError.message : String(timeError)} (Raw value: ${timestampVal})`);
                     }
 
-                    // Construct Final Account ID (Name + ID format)
-                    if (sourceType === 'telegram') {
-                        finalAccountId = `${accountName} (${accountIdVal})`;
-                    } else if (sourceType === 'youtube') {
-                        finalAccountId = `${accountName} (${accountIdVal})`;
+                    // Construct Final Account ID (Name + ID format where applicable)
+                    if (sourceType === 'telegram' || sourceType === 'youtube' || sourceType === 'facebook' || sourceType === 'instagram') {
+                         // Ensure accountName and accountIdVal are strings for safety
+                         const namePart = String(accountName || '').trim();
+                         const idPart = String(accountIdVal || '').trim();
+                         if (!namePart || !idPart) throw new Error("Missing name or ID for account construction");
+                         finalAccountId = `${namePart} (${idPart})`;
                     } else if (sourceType === 'bluesky') {
-                        finalAccountId = String(accountIdVal); // Just username for bluesky
+                        finalAccountId = String(accountIdVal || '').trim(); // Just username
+                        if (!finalAccountId) throw new Error("Missing username for Bluesky account");
                     } else if (sourceType === 'tiktok') {
-                        finalAccountId = `${accountName} (${row.region_code || 'unknown'})`; // No stable ID, use name+region
-                    } else { // FB/Insta
-                        finalAccountId = `${accountName} (${accountIdVal})`;
+                        const namePart = String(accountName || '').trim();
+                        if (!namePart) throw new Error("Missing author name for TikTok account");
+                        finalAccountId = `${namePart} (${row.region_code || 'unknown'})`;
+                    } else {
+                        throw new Error("Unhandled source type for account ID construction");
                     }
+
 
                     // Construct Final Object ID
                     if (objectIdSourceVal !== undefined && objectIdSourceVal !== null) {
                         finalObjectId = typeof objectIdSourceVal === 'string' ? objectIdSourceVal : String(objectIdSourceVal);
-                    }
+                    } // Allow empty string if value was present but empty
 
-                    // Final Validation of generated fields
-                    if (!finalAccountId.trim() || !finalContentId.trim()) {
-                        throw new Error('Empty account or content ID generated');
-                    }
+                    // Final Validation of generated fields before returning
+                    if (!finalAccountId.trim()) throw new Error('Generated Account ID is empty');
+                    if (!finalContentId.trim()) throw new Error('Generated Content ID is empty');
+                    // finalObjectId can be empty, that's allowed by CSDS
+                    if (finalTimestamp <= 0) throw new Error('Generated Timestamp is invalid');
+
 
                     return {
                         account_id: finalAccountId,
@@ -347,7 +380,7 @@ function App() {
                     };
 
                 } catch (error) {
-                     console.warn(`Skipping row ${index + 1}:`, error instanceof Error ? error.message : error, { rawRow: row });
+                     console.warn(`Skipping row ${index + 1} (Transformation Error):`, error instanceof Error ? error.message : String(error), { rawRow: row });
                      skipped++;
                      return null;
                 }
@@ -373,14 +406,14 @@ function App() {
           setEstimatedSizeMB(totalSizeMB); // Store size
 
           if (totalSizeMB > CSDS_SIZE_LIMIT_MB) {
-            const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES)); // Ensure at least 2 chunks
+            const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES));
             const targetRowSizeBytes = totalSize / transformed.length;
             const calculatedSampleSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE_BYTES / targetRowSizeBytes));
 
             setMinSplitParts(calculatedMinChunks);
             setSuggestedSampleSize(calculatedSampleSize);
-            setSplitParts(calculatedMinChunks); // Default to minimum required
-            setSampleSize(calculatedSampleSize); // Default to suggested size
+            setSplitParts(calculatedMinChunks);
+            setSampleSize(calculatedSampleSize);
             setLargeFileStrategy(null); // Force user choice
             setSampleType(null);
             setNumChunks(calculatedMinChunks);
@@ -391,7 +424,7 @@ function App() {
             });
           } else {
             setNumChunks(1);
-            setLargeFileStrategy(null); // Not needed
+            setLargeFileStrategy(null);
             setFeedbackMessage({
                 type: 'success',
                 text: `Successfully processed ${transformed.length} rows from ${fileName} (${skipped} skipped). File size is ${totalSizeMB.toFixed(1)}MB. Ready for download.`
@@ -402,7 +435,7 @@ function App() {
           console.error('Overall processing error:', err);
           setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
         } finally {
-          setIsLoading(false); // Ensure loading is turned off
+          setIsLoading(false);
         }
       },
       error: (error: Papa.ParseError) => {
@@ -417,7 +450,6 @@ function App() {
   const handleLargeFileStrategyChange = (strategy: 'sample' | 'split' | 'proceed') => {
     setLargeFileStrategy(strategy);
     if (strategy !== 'sample') setSampleType(null);
-    // Reset inputs to suggestions/defaults when strategy changes for predictability
     setSampleSize(suggestedSampleSize);
     setSplitParts(minSplitParts);
   };
@@ -428,8 +460,8 @@ function App() {
 
   const handleSampleSizeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(event.target.value, 10);
-    const maxRows = transformedData?.length || suggestedSampleSize; // Use actual rows if available
-    setSampleSize(isNaN(value) || value < 1 ? 1 : Math.min(value, maxRows)); // Clamp between 1 and total rows
+    const maxRows = transformedData?.length || suggestedSampleSize;
+    setSampleSize(isNaN(value) || value < 1 ? 1 : Math.min(value, maxRows));
   };
 
   const handleSplitPartsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -455,49 +487,55 @@ function App() {
         dataToSample.sort((a, b) => (b.timestamp_share || 0) - (a.timestamp_share || 0));
         return dataToSample.slice(0, finalSampleSize);
       case 'even':
-        const step = Math.max(1, dataToSample.length / finalSampleSize); // Use float step for better distribution potential
+        const step = Math.max(1, dataToSample.length / finalSampleSize);
         const sampled: CSDSRow[] = [];
+        // Ensure indices are within bounds and unique if step is ~1
+        const indices = new Set<number>();
         for (let i = 0; sampled.length < finalSampleSize; i++) {
             const index = Math.floor(i * step);
-            if (index >= dataToSample.length) break; // Avoid going out of bounds
-            sampled.push(dataToSample[index]);
+            if (index >= dataToSample.length) break;
+            if (!indices.has(index)) { // Avoid duplicates if step is small
+                sampled.push(dataToSample[index]);
+                indices.add(index);
+            }
+            // Safety break if step somehow becomes 0 or infinite loop
+            if (i > dataToSample.length * 2) break;
         }
-        return sampled; // Might get slightly more/less than exact sampleSize due to flooring, that's ok.
+        return sampled;
       default: return null;
     }
   };
 
-  const downloadData = (data: CSDSRow[], baseFilename: string, suffix: string) => {
-    if (!data || data.length === 0) {
-        throw new Error("No data provided for download.");
-    }
+   // Generic download utility after data generation
+   const downloadData = (getData: () => CSDSRow[] | null, baseFilename: string, suffix: string, statusUpdate: string) => {
     setIsLoading(true);
-    setFeedbackMessage({ type: 'info', text: `Generating CSV for ${suffix}...` });
+    setFeedbackMessage({ type: 'info', text: statusUpdate });
 
     setTimeout(() => { // Allow UI update
-      try {
-        const csv = Papa.unparse(data);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const downloadFilename = `${baseFilename}_${suffix}.csv`;
-        triggerDownload(blob, downloadFilename);
-        setFeedbackMessage({ type: 'success', text: `Download initiated for ${suffix}.` });
-      } catch (error) {
-        console.error(`Error during ${suffix} download:`, error);
-        setFeedbackMessage({ type: 'error', text: `Failed to generate CSV for ${suffix}: ${error instanceof Error ? error.message : 'Unknown error'}` });
-      } finally {
-        setIsLoading(false);
-      }
+        try {
+            const dataToDownload = getData();
+            if (!dataToDownload || dataToDownload.length === 0) {
+                throw new Error("No data generated for download.");
+            }
+            const csv = Papa.unparse(dataToDownload);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const downloadFilename = `${baseFilename}_${suffix}.csv`;
+            triggerDownload(blob, downloadFilename);
+            setFeedbackMessage({ type: 'success', text: `Download initiated for ${suffix}.` });
+        } catch (error) {
+            console.error(`Error during ${suffix} download:`, error);
+            setFeedbackMessage({ type: 'error', text: `Failed to generate CSV for ${suffix}: ${error instanceof Error ? error.message : 'Unknown error'}` });
+        } finally {
+            setIsLoading(false);
+        }
     }, 50);
   };
 
+
   const handleDownloadSample = () => {
-    const sampledData = getSampledData();
-    if (sampledData) {
-        const base = `${sourceType || 'data'}_csds_${sampleType}_sample_${sampledData.length}rows_${new Date().toISOString().slice(0, 10)}`;
-        downloadData(sampledData, base, 'sample');
-    } else {
-        setFeedbackMessage({ type: 'error', text: 'Could not generate sample. Please check selections.' });
-    }
+     const base = `${sourceType || 'data'}_csds`;
+     const suffix = `${sampleType}_sample_${sampleSize}rows_${new Date().toISOString().slice(0, 10)}`;
+     downloadData(getSampledData, base, suffix, `Generating ${sampleType} sample (${sampleSize} rows)...`);
   };
 
   const handleDownloadSplitUser = () => {
@@ -509,9 +547,13 @@ function App() {
     setIsLoading(true);
     setFeedbackMessage({ type: 'info', text: `Preparing ${splitParts} files...` });
 
-    setTimeout(() => {
+    setTimeout(async () => { // Make async to potentially await between downloads
       try {
+        if (!transformedData || transformedData.length === 0) throw new Error("No transformed data available for splitting.");
+
         const headerString = Papa.unparse([transformedData[0]], { header: true }).split('\r\n')[0];
+        if (!headerString) throw new Error("Failed to generate CSV header.");
+
         const baseFilename = `${sourceType || 'data'}_csds_ready_${new Date().toISOString().slice(0, 10)}`;
         const totalRows = transformedData.length;
         const rowsPerChunk = Math.ceil(totalRows / splitParts);
@@ -529,8 +571,8 @@ function App() {
                 const chunkFilename = `${baseFilename}_part_${i + 1}_of_${splitParts}.csv`;
                 triggerDownload(chunkBlob, chunkFilename);
                 downloadsInitiated++;
-                 // Optional small delay between downloads if browser blocks rapid ones
-                 // await new Promise(resolve => setTimeout(resolve, 200));
+                 // Optional delay if needed (e.g., if browser throttles rapid downloads)
+                 // await new Promise(resolve => setTimeout(resolve, 250));
             }
         }
         setFeedbackMessage({ type: 'success', text: `Initiated download for ${downloadsInitiated} split files.` });
@@ -544,15 +586,19 @@ function App() {
   };
 
   const handleDownloadProceedAnyway = () => {
-    if (transformedData) {
-        const base = `${sourceType || 'data'}_csds_ready_FULL_${new Date().toISOString().slice(0, 10)}`;
-        downloadData(transformedData, base, `full_${estimatedSizeMB.toFixed(1)}MB`);
-    }
+      const base = `${sourceType || 'data'}_csds_ready`;
+      // Provide reference to the original full data array
+      downloadData(() => transformedData, base, `FULL_${estimatedSizeMB.toFixed(1)}MB_${new Date().toISOString().slice(0, 10)}`, `Preparing full ${estimatedSizeMB.toFixed(1)}MB file...`);
   };
+
+   const handleDownloadSingle = () => {
+        const base = `${sourceType || 'data'}_csds_ready`;
+        downloadData(() => transformedData, base, `single_${estimatedSizeMB.toFixed(1)}MB_${new Date().toISOString().slice(0, 10)}`, `Preparing ${estimatedSizeMB.toFixed(1)}MB file...`);
+    };
 
   const handleFinalDownload = () => {
     if (estimatedSizeMB <= CSDS_SIZE_LIMIT_MB && transformedData) {
-        handleDownloadSingle(); // Use the specific single handler
+        handleDownloadSingle();
         return;
     }
     // Handle large file strategies
@@ -585,7 +631,8 @@ function App() {
   const step4Enabled = step3Enabled && !!objectIdSource;
 
   const getStepClasses = (enabled: boolean) => {
-    return `bg-gray-50 rounded-lg p-4 sm:p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`; // Added pointer-events-none
+    // Apply pointer-events-none only if not enabled AND not currently loading (allow interaction with inputs while loading if needed)
+     return `bg-gray-50 rounded-lg p-4 sm:p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50 ' + (!isLoading ? 'pointer-events-none' : '')}`;
   };
 
   // --- Render ---
@@ -608,7 +655,7 @@ function App() {
           </Alert>
 
           {/* --- Step 1: Source Selection --- */}
-           <div className={getStepClasses(true)}> {/* Always enabled but inputs disabled if loading */}
+           <div className={getStepClasses(true)}> {/* Always enabled conceptually, inputs disabled if loading */}
              <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 flex items-center">
                <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 text-sm sm:text-base mr-2 sm:mr-3">1</span>
                Choose Source Platform
@@ -659,11 +706,11 @@ function App() {
 
                 {sourceType === 'telegram' && (
                   <div className="flex flex-col sm:flex-row gap-x-6 gap-y-3 mt-2">
-                     <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                     <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                        <input type="radio" value="telegram_channel" checked={accountSource === 'telegram_channel'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                        Channel <code className="ml-1 text-xs">(channel_name, channel_id)</code>
                      </label>
-                     <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                     <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                        <input type="radio" value="telegram_author" checked={accountSource === 'telegram_author'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                        Author <code className="ml-1 text-xs">(post_author, sender_id)</code>
                      </label>
@@ -672,12 +719,12 @@ function App() {
 
                 {(sourceType === 'facebook' || sourceType === 'instagram') && (
                   <div className="flex flex-col sm:flex-row gap-x-6 gap-y-3 mt-2">
-                     <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                     <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                        <input type="radio" value="post_owner" checked={accountSource === 'post_owner'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                        Post Owner <code className="ml-1 text-xs">(post_owner.id/name)</code>
                      </label>
                      {sourceType === 'facebook' && (
-                       <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                       <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                          <input type="radio" value="surface" checked={accountSource === 'surface'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                          Surface <code className="ml-1 text-xs">(surface.id/name)</code>
                        </label>
@@ -722,12 +769,12 @@ function App() {
                 )}
                 {(sourceType === 'facebook' || sourceType === 'instagram') && (
                   <div className="flex flex-col sm:flex-row gap-x-6 gap-y-3 mt-2">
-                     <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                     <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                        <input type="radio" value="text" checked={objectIdSource === 'text'} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                        Text content <code className="ml-1 text-xs">(text)</code>
                      </label>
                      {sourceType === 'facebook' && (
-                       <label className={`flex items-center ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
+                       <label className={`flex items-center text-sm sm:text-base ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer hover:text-[#00926c]'}`}>
                          <input type="radio" value="link" checked={objectIdSource === 'link'} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} disabled={isLoading} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
                          Link attachment <code className="ml-1 text-xs">(link_attachment.link)</code>
                        </label>
@@ -778,13 +825,17 @@ function App() {
                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                              </svg>
-                             {largeFileStrategy === 'split' ? 'Preparing split files...' : largeFileStrategy === 'sample' ? 'Generating sample...' : 'Processing file...'} please wait.
+                             {/* Dynamic loading message based on action */}
+                             {largeFileStrategy === 'split' ? 'Preparing split files...' :
+                              largeFileStrategy === 'sample' ? 'Generating sample...' :
+                              largeFileStrategy === 'proceed' ? 'Preparing full file...' :
+                              'Processing file...'} please wait.
                          </div>
                      )}
                      {/* Required Columns Info */}
-                     {step4Enabled && !isLoading && ( // Only show if ready to upload and not loading
+                     {step4Enabled && !isLoading && !transformedData && ( // Only show if ready to upload, not loading, and no results yet
                         <Alert type="info">
-                            <span className="font-medium">Required Columns:</span> Ensure your CSV has the columns corresponding to your selections above. For example, for {sourceType} using '{accountSource}' account source and '{objectIdSource}' object ID source, the necessary columns are: {getRequiredHeaders().map(h => <code key={h} className="text-xs bg-blue-100 p-0.5 rounded mx-0.5">{h}</code>)}
+                            <span className="font-medium">Required Columns:</span> Ensure your CSV includes columns for your selections. E.g., for {sourceType} / {accountSource} / {objectIdSource}: {getRequiredHeaders().map(h => <code key={h} className="text-xs bg-blue-100 p-0.5 rounded mx-0.5">{h || 'N/A'}</code>)}
                         </Alert>
                      )}
                   </div>
@@ -792,14 +843,20 @@ function App() {
            </div>
 
           {/* --- Feedback Area (Displays processing results/errors) --- */}
-          {feedbackMessage && !isLoading && ( // Show feedback when not loading
+          {feedbackMessage && !isLoading && ( // Show feedback when not loading/processing
               <Alert type={feedbackMessage.type}>
                   {feedbackMessage.text}
+                  {/* Add details about row counts if successful or warning */}
+                  {(feedbackMessage.type === 'success' || feedbackMessage.type === 'warning') && processedRows > 0 && (
+                    <span className="block mt-1 text-xs">
+                        (Processed: {processedRows.toLocaleString()}, Skipped: {skippedRows.toLocaleString()})
+                    </span>
+                  )}
               </Alert>
           )}
 
           {/* --- Download / Strategy Area --- */}
-          {transformedData && !isLoading && (
+          {transformedData && !isLoading && ( // Only show this section if data is ready and not loading
             <div className="mt-4 sm:mt-6 space-y-5 sm:space-y-6">
 
               {/* --- Strategy Selection UI (Only if file is too large) --- */}
@@ -830,7 +887,7 @@ function App() {
 
                   {/* --- Sampling Options --- */}
                   {largeFileStrategy === 'sample' && (
-                    <div className="pl-4 sm:pl-8 border-l-4 border-yellow-300 ml-1 sm:ml-2 py-3 space-y-3">
+                    <div className="pl-4 sm:pl-6 border-l-4 border-yellow-300 ml-1 py-3 space-y-3">
                       <p className="text-xs sm:text-sm text-yellow-800">Reduce the dataset to a manageable size.</p>
                       {/* Sample Type Radios */}
                       <div className="flex flex-wrap gap-x-4 sm:gap-x-6 gap-y-2">
@@ -863,14 +920,14 @@ function App() {
                                disabled={isLoading || !sampleType}
                                aria-describedby="sample-size-hint"
                            />
-                           <span id="sample-size-hint" className="text-xs text-yellow-700">(Max: {transformedData.length}, Suggested: ~{suggestedSampleSize})</span>
+                           <span id="sample-size-hint" className="text-xs text-yellow-700">(Max: {transformedData.length.toLocaleString()}, Suggested: ~{suggestedSampleSize.toLocaleString()})</span>
                        </div>
                     </div>
                   )}
 
                   {/* --- Splitting Options --- */}
                   {largeFileStrategy === 'split' && (
-                     <div className="pl-4 sm:pl-8 border-l-4 border-yellow-300 ml-1 sm:ml-2 py-3 space-y-3">
+                     <div className="pl-4 sm:pl-6 border-l-4 border-yellow-300 ml-1 py-3 space-y-3">
                        <p className="text-xs sm:text-sm text-yellow-800">Divide into smaller files (each under ~{TARGET_CHUNK_SIZE_MB}MB).</p>
                        <div className="flex flex-wrap items-center gap-2">
                            <label htmlFor="split-parts" className="text-sm font-medium text-yellow-900 whitespace-nowrap">Number of parts:</label>
@@ -891,7 +948,7 @@ function App() {
 
                    {/* --- Proceed Anyway Info --- */}
                    {largeFileStrategy === 'proceed' && (
-                       <div className="pl-4 sm:pl-8 border-l-4 border-yellow-300 ml-1 sm:ml-2 py-3">
+                       <div className="pl-4 sm:pl-6 border-l-4 border-yellow-300 ml-1 py-3">
                            <p className="text-xs sm:text-sm text-yellow-800">Download the full {estimatedSizeMB.toFixed(1)}MB file. CSDS may reject files over {CSDS_SIZE_LIMIT_MB}MB.</p>
                        </div>
                    )}
@@ -902,14 +959,14 @@ function App() {
               {/* Renders if file is small OR if a large file strategy is chosen */}
               {(estimatedSizeMB <= CSDS_SIZE_LIMIT_MB || largeFileStrategy) && (
                 <button
-                  onClick={handleFinalDownload}
+                  onClick={handleFinalDownload} // Single handler determines action
                   className={`w-full flex justify-center items-center px-6 py-2.5 sm:px-8 sm:py-3 rounded-lg font-bold text-base sm:text-lg transition-colors duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2
                     ${largeFileStrategy === 'proceed' ? 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500' :
                       largeFileStrategy === 'split' ? 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500' :
                       'bg-[#00926c] hover:bg-[#007d5c] text-white focus:ring-[#00926c]'}
                     ${!isDownloadStrategyReady() ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
-                  disabled={!isDownloadStrategyReady()}
+                  disabled={!isDownloadStrategyReady()} // Use the helper function
                 >
                   {/* Icon and Text logic */}
                   {isLoading ? (
@@ -929,7 +986,7 @@ function App() {
 
                   {/* Button Text logic */}
                   {isLoading ? 'Processing...' :
-                   largeFileStrategy === 'sample' ? `Download Sample (${sampleSize} rows)` :
+                   largeFileStrategy === 'sample' ? `Download Sample (${sampleSize.toLocaleString()} rows)` :
                    largeFileStrategy === 'split' ? `Download Split Files (${splitParts} parts)` :
                    largeFileStrategy === 'proceed' ? `Download Full File (${estimatedSizeMB.toFixed(1)}MB)` :
                    `Download Transformed CSV (${estimatedSizeMB.toFixed(1)}MB)`}
@@ -938,7 +995,7 @@ function App() {
             </div>
           )}
 
-          {/* Footer */}
+           {/* Footer */}
            <div className="bg-gray-50 p-3 sm:p-4 text-center text-xs text-gray-500 border-t border-gray-200 mt-4 sm:mt-6">
              <p>CSDS Pre-processor v1.4.0 - Large File Strategies</p>
              <p className="mt-1">
@@ -947,9 +1004,10 @@ function App() {
                 By <a href="https://github.com/fabiogiglietto" target="_blank" rel="noopener noreferrer" className="text-[#00926c] hover:underline">Fabio Giglietto</a>
              </p>
            </div>
-         </div>
-       </div>
-     );
+         </div> {/* End main content padding div */}
+      </div> {/* End max-w-4xl container div <<-- THIS WAS MISSING */}
+    </div> // End outermost div
+   );
 }
 
 export default App;
