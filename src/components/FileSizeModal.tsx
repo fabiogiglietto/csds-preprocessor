@@ -1,3 +1,4 @@
+// src/components/FileSizeModal.tsx
 import React, { useState } from 'react';
 
 // This would be a modal that appears when the file exceeds 15MB

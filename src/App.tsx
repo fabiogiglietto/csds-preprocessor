@@ -80,6 +80,9 @@ function App() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string>('');
 
+  // State variables for file size modal
+  const [showSizeModal, setShowSizeModal] = useState<boolean>(false);
+  const [estimatedFileSizeMB, setEstimatedFileSizeMB] = useState<number>(0);
   const resetState = () => {
     setTransformedData(null);
     setFeedbackMessage(null);
@@ -140,6 +143,7 @@ function App() {
     setSkippedRows(0);
     setFileName('');
   };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -327,14 +331,16 @@ function App() {
           const estimatedSizeMB = new Blob([csvContent]).size / (1024 * 1024);
 
           setTransformedData(transformed);
+          setEstimatedFileSizeMB(estimatedSizeMB);
           setIsLoading(false);
 
-          // Set success/warning message AFTER setting data
-           if (estimatedSizeMB > 15) {
-               setFeedbackMessage({ type: 'warning', text: `Processed ${transformed.length} rows successfully. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Warning: The transformed file size (${estimatedSizeMB.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service. Consider reducing the input file size.` });
-           } else {
-               setFeedbackMessage({ type: 'success', text: `Successfully processed ${transformed.length} rows from ${fileName}. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Ready for download.` });
-           }
+          // Check if file exceeds size limit and show modal if needed
+          if (estimatedSizeMB > 15) {
+            setFeedbackMessage({ type: 'warning', text: `Processed ${transformed.length} rows successfully. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Warning: The transformed file size (${estimatedSizeMB.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service.` });
+            setShowSizeModal(true); // Show modal with options
+          } else {
+            setFeedbackMessage({ type: 'success', text: `Successfully processed ${transformed.length} rows from ${fileName}. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Ready for download.` });
+          }
 
         } catch (err) {
           console.error('Processing error:', err);
@@ -367,7 +373,296 @@ function App() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+  const resetState = () => {
+    setTransformedData(null);
+    setFeedbackMessage(null);
+    setProcessedRows(0);
+    setSkippedRows(0);
+    setIsLoading(false);
+    setFileName('');
+    // Keep source type, account source, object ID source if user might re-upload
+  };
 
+  const handleSourceTypeChange = (value: SourceType) => {
+    setSourceType(value);
+    resetState(); // Reset everything else when source changes
+
+    // Auto-select account source for certain platforms
+    if (value === 'bluesky') {
+      setAccountSource('username');
+      setObjectIdSource('text');
+    } else if (value === 'youtube') {
+      setAccountSource('channel');
+      setObjectIdSource(null); // Require user to select object ID
+    } else if (value === 'tiktok') {
+      setAccountSource('author');
+      setObjectIdSource(null); // Require user to select object ID
+    } else if (value === 'telegram') {
+      setAccountSource(null); // Let user choose either channel or author
+      setObjectIdSource('message_text'); // Default to message_text for Telegram
+    } else {
+      setAccountSource(null); // Require user to select account source
+      setObjectIdSource(null); // Require user to select object ID
+    }
+  };
+
+  const handleAccountSourceChange = (value: AccountSource) => {
+    setAccountSource(value);
+    // Don't reset objectIdSource if it was auto-selected (like for BlueSky)
+    if (sourceType !== 'bluesky') {
+        setObjectIdSource(null);
+    }
+    
+    // For Telegram, auto-select message_text as the object ID source
+    if (sourceType === 'telegram') {
+        setObjectIdSource('message_text');
+    }
+    
+    setTransformedData(null); // Reset results if account source changes
+    setFeedbackMessage(null);
+    setProcessedRows(0);
+    setSkippedRows(0);
+    setFileName('');
+  };
+
+  const handleObjectIdSourceChange = (value: ObjectIdSource) => {
+    setObjectIdSource(value);
+    setTransformedData(null); // Reset results if object ID changes
+    setFeedbackMessage(null);
+    setProcessedRows(0);
+    setSkippedRows(0);
+    setFileName('');
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    resetState(); // Reset previous results and messages
+    setIsLoading(true); // Start loading indicator
+
+    // Basic check before parsing
+    if (!sourceType || !accountSource || !objectIdSource) {
+        setFeedbackMessage({ type: 'error', text: 'Please ensure all selections (Platform, Account Source, Object ID Source) are made before uploading.' });
+        setIsLoading(false);
+        setFileName('');
+        // Clear the file input value
+        if (event.target) {
+            event.target.value = '';
+        }
+        return;
+    }
+
+
+    Papa.parse(file, {
+      header: true,
+      dynamicTyping: true, // Be careful with this, might infer wrong types
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          let skipped = 0;
+          const requiredFieldsPresent = results.meta?.fields; // Check if headers exist
+
+          if (!requiredFieldsPresent || results.data.length === 0) {
+            setFeedbackMessage({ type: 'error', text: 'The CSV file appears to be empty or does not contain header rows.' });
+            setIsLoading(false);
+            return;
+          }
+
+          // Row validation and transformation logic (keep as is, but ensure robustness)
+          const transformed = results.data
+            .map((row: any, index: number) => { // Add index for potential logging
+                // Check for required fields based on source type and selections
+                let isValid = false;
+                let accountIdVal: string | number | undefined;
+                let contentIdVal: string | number | undefined;
+                let timestampVal: string | number | undefined;
+                let objectIdSourceVal: any; // Can be string, number, boolean
+
+                try {
+                    if (sourceType === 'telegram') {
+                        // For Telegram data
+                        if (accountSource === 'telegram_channel') {
+                            accountIdVal = `${row.channel_name} ${row.channel_id}`;
+                        } else if (accountSource === 'telegram_author') {
+                            accountIdVal = `${row.post_author} ${row.sender_id}`;
+                        }
+                        
+                        contentIdVal = row.message_id;
+                        timestampVal = row.date;
+                        objectIdSourceVal = row.message_text;
+                        
+                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null);
+                    }
+                    else if (sourceType === 'youtube') {
+                        accountIdVal = row.channelId;
+                        contentIdVal = row.videoId;
+                        timestampVal = row.publishedAt;
+                        switch (objectIdSource) {
+                            case 'videoTitle': objectIdSourceVal = row.videoTitle; break;
+                            case 'videoDescription': objectIdSourceVal = row.videoDescription; break;
+                            case 'tags': objectIdSourceVal = row.tags; break;
+                        }
+                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && objectIdSourceVal !== '');
+                    } else if (sourceType === 'bluesky') {
+                        accountIdVal = row.username;
+                        contentIdVal = row.id;
+                        timestampVal = row.date;
+                        objectIdSourceVal = row.text; // Always text for BlueSky
+                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && objectIdSourceVal !== '');
+                    } else if (sourceType === 'tiktok') {
+                        accountIdVal = row.author_name; // Use author_name as ID base
+                        contentIdVal = row.video_id;
+                        timestampVal = row.create_time;
+                        switch (objectIdSource) {
+                            case 'video_description': objectIdSourceVal = row.video_description; break;
+                            case 'voice_to_text': objectIdSourceVal = row.voice_to_text; break;
+                            case 'video_url': objectIdSourceVal = row.video_url; break;
+                            case 'effect_ids': objectIdSourceVal = row.effect_ids; break; // Allow 0 or empty array
+                            case 'music_id': objectIdSourceVal = row.music_id; break; // Allow 0 or empty string
+                            case 'hashtag_names': objectIdSourceVal = row.hashtag_names; break;
+                        }
+                        // Check for presence and non-empty string for text-based fields, allow falsy for others if selected
+                        const objectIdRequired = ['video_description', 'voice_to_text', 'video_url', 'hashtag_names'].includes(objectIdSource || '');
+                        const objectIdCheckPassed = objectIdRequired ? Boolean(objectIdSourceVal) : (objectIdSourceVal !== undefined && objectIdSourceVal !== null);
+
+                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdCheckPassed);
+                    } else { // Facebook / Instagram
+                        const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                        const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                        accountIdVal = row[idField];
+                        contentIdVal = row.id;
+                        timestampVal = row.creation_time;
+                        objectIdSourceVal = (objectIdSource === 'text') ? row.text : row['link_attachment.link'];
+                        isValid = Boolean(accountIdVal && row[nameField] && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && objectIdSourceVal !== '');
+                    }
+                } catch (parseRowError) {
+                    console.warn(`Skipping row ${index + 1} due to parsing issue:`, parseRowError);
+                    isValid = false;
+                }
+
+
+                if (!isValid) {
+                    skipped++;
+                    return null; // Skip invalid rows
+                }
+
+                // Transform valid rows
+                try {
+                    if (sourceType === 'telegram') {
+                        return {
+                            account_id: String(accountIdVal),
+                            content_id: String(contentIdVal),
+                            object_id: String(objectIdSourceVal || ''),
+                            timestamp_share: typeof timestampVal === 'string' ? 
+                                Math.floor(new Date(timestampVal).getTime() / 1000) : 
+                                typeof timestampVal === 'number' ? 
+                                    timestampVal : 
+                                    Math.floor(Date.now() / 1000)
+                        };
+                    }
+                    else if (sourceType === 'youtube') {
+                        return {
+                            account_id: `${row.channelTitle} (${row.channelId})`,
+                            content_id: String(row.videoId),
+                            object_id: String(objectIdSourceVal),
+                            timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
+                        };
+                    } else if (sourceType === 'bluesky') {
+                        return {
+                            account_id: String(row.username),
+                            content_id: String(row.id),
+                            object_id: String(objectIdSourceVal),
+                            timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
+                        };
+                    } else if (sourceType === 'tiktok') {
+                        // Handle potential non-string values for object_id
+                        let finalObjectId = '';
+                        if (objectIdSourceVal !== undefined && objectIdSourceVal !== null) {
+                            finalObjectId = typeof objectIdSourceVal === 'string' ? objectIdSourceVal : String(objectIdSourceVal);
+                        }
+
+                         return {
+                             account_id: `${row.author_name} (${row.region_code || 'unknown'})`,
+                             content_id: String(row.video_id),
+                             object_id: finalObjectId,
+                             timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
+                         };
+                    } else { // Facebook / Instagram
+                        const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
+                        const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
+                        return {
+                            account_id: `${row[nameField]} (${row[idField]})`,
+                            content_id: String(row.id),
+                            object_id: String(objectIdSourceVal),
+                            timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
+                        };
+                    }
+                } catch (transformError) {
+                     console.warn(`Skipping row ${index + 1} due to transformation issue:`, transformError);
+                     skipped++;
+                     return null;
+                }
+            })
+            .filter((row): row is CSDSRow => row !== null); // Filter out nulls (skipped rows)
+
+
+          setSkippedRows(skipped);
+          setProcessedRows(transformed.length);
+
+          if (transformed.length === 0) {
+            setFeedbackMessage({ type: 'error', text: `No valid data rows could be processed from ${fileName}. Check column names and content requirements. ${skipped > 0 ? `(${skipped} rows skipped)` : ''}`});
+            setIsLoading(false);
+            return;
+          }
+
+          const csvContent = Papa.unparse(transformed);
+          const estimatedSizeMB = new Blob([csvContent]).size / (1024 * 1024);
+
+          setTransformedData(transformed);
+          setEstimatedFileSizeMB(estimatedSizeMB);
+          setIsLoading(false);
+
+          // Check if file exceeds size limit and show modal if needed
+          if (estimatedSizeMB > 15) {
+            setFeedbackMessage({ type: 'warning', text: `Processed ${transformed.length} rows successfully. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Warning: The transformed file size (${estimatedSizeMB.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service.` });
+            setShowSizeModal(true); // Show modal with options
+          } else {
+            setFeedbackMessage({ type: 'success', text: `Successfully processed ${transformed.length} rows from ${fileName}. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Ready for download.` });
+          }
+
+        } catch (err) {
+          console.error('Processing error:', err);
+          setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
+          setIsLoading(false);
+        }
+      },
+      error: (error: Papa.ParseError) => {
+        console.error('Parse error:', error);
+        setFeedbackMessage({ type: 'error', text: `Error parsing CSV: ${error.message}` });
+        setIsLoading(false);
+        setFileName('');
+      }
+    });
+  };
+
+  const handleDownload = () => {
+    if (!transformedData) return;
+
+    const csv = Papa.unparse(transformedData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    // Generate a more descriptive filename
+    const outputFilename = `${sourceType}_csds_ready_${new Date().toISOString().slice(0,10)}.csv`;
+    link.setAttribute('download', outputFilename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   // Determine if the next step should be enabled
   const step2Enabled = !!sourceType;
   const step3Enabled = step2Enabled && !!accountSource;
@@ -376,6 +671,7 @@ function App() {
   const getStepClasses = (enabled: boolean) => {
       return `bg-gray-50 rounded-lg p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50'}`;
   };
+  
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 py-8 px-4 font-['Comfortaa'] text-[#3d3d3c]">
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden">
@@ -412,7 +708,7 @@ function App() {
                     onChange={() => handleSourceTypeChange(platform)}
                     className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c] border-gray-300"
                   />
-                   {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                  {platform.charAt(0).toUpperCase() + platform.slice(1)}
                 </label>
               ))}
             </div>
@@ -659,11 +955,22 @@ function App() {
           )}
         </div>
 
+        {/* Add FileSizeModal component */}
+        <FileSizeModal
+          isOpen={showSizeModal}
+          onClose={() => setShowSizeModal(false)}
+          onSplit={handleSplitDownload}
+          onTimeSplit={handleTimeBasedSplit}
+          onSample={handleStratifiedSampling}
+          fileSize={estimatedFileSizeMB}
+          rowCount={transformedData?.length || 0}
+        />
+
         {/* Footer */}
         <div className="bg-gray-50 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
           <p>CSDS Pre-processor v1.2.0 - Added Telegram Support</p>
           <p className="mt-1">
-            <a
+            
               href="https://github.com/fabiogiglietto/csds-preprocessor"
               target="_blank"
               rel="noopener noreferrer"
