@@ -406,14 +406,14 @@ function App() {
           setEstimatedSizeMB(totalSizeMB); // Store size
 
           if (totalSizeMB > CSDS_SIZE_LIMIT_MB) {
-            const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES));
+            const calculatedMinChunks = Math.max(2, Math.ceil(totalSize / TARGET_CHUNK_SIZE_BYTES)); // Ensure at least 2 chunks
             const targetRowSizeBytes = totalSize / transformed.length;
             const calculatedSampleSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE_BYTES / targetRowSizeBytes));
 
             setMinSplitParts(calculatedMinChunks);
             setSuggestedSampleSize(calculatedSampleSize);
-            setSplitParts(calculatedMinChunks);
-            setSampleSize(calculatedSampleSize);
+            setSplitParts(calculatedMinChunks); // Default to minimum required
+            setSampleSize(calculatedSampleSize); // Default to suggested size
             setLargeFileStrategy(null); // Force user choice
             setSampleType(null);
             setNumChunks(calculatedMinChunks);
@@ -424,7 +424,7 @@ function App() {
             });
           } else {
             setNumChunks(1);
-            setLargeFileStrategy(null);
+            setLargeFileStrategy(null); // Not needed
             setFeedbackMessage({
                 type: 'success',
                 text: `Successfully processed ${transformed.length} rows from ${fileName} (${skipped} skipped). File size is ${totalSizeMB.toFixed(1)}MB. Ready for download.`
@@ -435,7 +435,7 @@ function App() {
           console.error('Overall processing error:', err);
           setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
         } finally {
-          setIsLoading(false);
+          setIsLoading(false); // Ensure loading is turned off
         }
       },
       error: (error: Papa.ParseError) => {
@@ -644,8 +644,9 @@ function App() {
             <h1 className="text-2xl sm:text-3xl font-bold text-center">
             CSDS Pre-processor
             </h1>
+            {/* CORRECTED LINE BELOW */}
             <p className="mt-2 text-center text-xs sm:text-sm opacity-90 max-w-3xl mx-auto">
-                 Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. Handles large files (>{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
+                 Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. Handles large files (&gt;{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
             </p>
         </div>
 
@@ -1005,7 +1006,7 @@ function App() {
              </p>
            </div>
          </div> {/* End main content padding div */}
-      </div> {/* End max-w-4xl container div <<-- THIS WAS MISSING */}
+      </div> {/* End max-w-4xl container div */}
     </div> // End outermost div
    );
 }
