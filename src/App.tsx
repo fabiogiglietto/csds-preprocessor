@@ -2,12 +2,12 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
 
-// Updated type definitions to include YouTube
-type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | null;
-type AccountSource = 'post_owner' | 'surface' | 'author' | 'username' | 'channel' | null;
+// Updated type definitions to include Telegram
+type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | 'telegram' | null;
+type AccountSource = 'post_owner' | 'surface' | 'author' | 'username' | 'channel' | 'telegram_channel' | 'telegram_author' | null;
 type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' |
                       'video_url' | 'effect_ids' | 'music_id' | 'hashtag_names' |
-                      'videoTitle' | 'videoDescription' | 'tags' | null;
+                      'videoTitle' | 'videoDescription' | 'tags' | 'message_text' | null;
 
 // --- Helper Components for Messages/Alerts ---
 
@@ -102,6 +102,9 @@ function App() {
     } else if (value === 'tiktok') {
       setAccountSource('author');
       setObjectIdSource(null); // Require user to select object ID
+    } else if (value === 'telegram') {
+      setAccountSource(null); // Let user choose either channel or author
+      setObjectIdSource('message_text'); // Default to message_text for Telegram
     } else {
       setAccountSource(null); // Require user to select account source
       setObjectIdSource(null); // Require user to select object ID
@@ -114,6 +117,12 @@ function App() {
     if (sourceType !== 'bluesky') {
         setObjectIdSource(null);
     }
+    
+    // For Telegram, auto-select message_text as the object ID source
+    if (sourceType === 'telegram') {
+        setObjectIdSource('message_text');
+    }
+    
     setTransformedData(null); // Reset results if account source changes
     setFeedbackMessage(null);
     setProcessedRows(0);
@@ -177,7 +186,21 @@ function App() {
                 let objectIdSourceVal: any; // Can be string, number, boolean
 
                 try {
-                    if (sourceType === 'youtube') {
+                    if (sourceType === 'telegram') {
+                        // For Telegram data
+                        if (accountSource === 'telegram_channel') {
+                            accountIdVal = `${row.channel_name} ${row.channel_id}`;
+                        } else if (accountSource === 'telegram_author') {
+                            accountIdVal = `${row.post_author} ${row.sender_id}`;
+                        }
+                        
+                        contentIdVal = row.message_id;
+                        timestampVal = row.date;
+                        objectIdSourceVal = row.message_text;
+                        
+                        isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null);
+                    }
+                    else if (sourceType === 'youtube') {
                         accountIdVal = row.channelId;
                         contentIdVal = row.videoId;
                         timestampVal = row.publishedAt;
@@ -232,7 +255,19 @@ function App() {
 
                 // Transform valid rows
                 try {
-                    if (sourceType === 'youtube') {
+                    if (sourceType === 'telegram') {
+                        return {
+                            account_id: String(accountIdVal),
+                            content_id: String(contentIdVal),
+                            object_id: String(objectIdSourceVal || ''),
+                            timestamp_share: typeof timestampVal === 'string' ? 
+                                Math.floor(new Date(timestampVal).getTime() / 1000) : 
+                                typeof timestampVal === 'number' ? 
+                                    timestampVal : 
+                                    Math.floor(Date.now() / 1000)
+                        };
+                    }
+                    else if (sourceType === 'youtube') {
                         return {
                             account_id: `${row.channelTitle} (${row.channelId})`,
                             content_id: String(row.videoId),
@@ -351,7 +386,7 @@ function App() {
             CSDS Pre-processor
             </h1>
             <p className="mt-2 text-center text-sm opacity-90 max-w-2xl mx-auto">
-                Transform CSV data from Meta Content Library, TikTok Research API, BlueSky (via Communalytic), and YouTube Data Tools into the standard CSDS format.
+                Transform CSV data from Meta Content Library, TikTok Research API, BlueSky (via Communalytic), YouTube Data Tools, and Telegram into the standard CSDS format.
             </p>
         </div>
 
@@ -366,9 +401,9 @@ function App() {
               <span className="flex items-center justify-center bg-[#00926c] text-white rounded-full w-7 h-7 text-base mr-3">1</span>
               Choose Source Platform
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 mt-4">
               {/* Radio buttons using labels for better click area */}
-              {(['facebook', 'instagram', 'tiktok', 'youtube', 'bluesky'] as const).map(platform => (
+              {(['facebook', 'instagram', 'tiktok', 'youtube', 'bluesky', 'telegram'] as const).map(platform => (
                 <label key={platform} className={`flex items-center p-3 border rounded-lg transition-colors duration-200 cursor-pointer ${sourceType === platform ? 'border-[#00926c] bg-[#00926c]/10 ring-2 ring-[#00926c]' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-100'}`}>
                   <input
                     type="radio"
@@ -388,7 +423,8 @@ function App() {
                   <a href="https://developers.facebook.com/docs/content-library-and-api/content-library" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Meta</a>,
                   <a href="https://developers.tiktok.com/products/research-api/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">TikTok</a>,
                   <a href="https://communalytic.org/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">BlueSky (via Communalytic)</a>,
-                  <a href="https://ytdt.digitalmethods.net/mod_videos_list.php" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">YouTube</a>
+                  <a href="https://ytdt.digitalmethods.net/mod_videos_list.php" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">YouTube</a>,
+                  <a href="https://telegram.org/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">Telegram</a>
                   <span>→</span>
                   <a href="https://coortweet.lab.atc.gr/" target="_blank" rel="noopener noreferrer" className="text-[#00926c] underline hover:text-[#007d5c]">CSDS (CooRTweet)</a>
              </div>
@@ -406,6 +442,31 @@ function App() {
                 {sourceType === 'bluesky' && <Alert type="info">For BlueSky, 'username' is automatically selected as the account source.</Alert>}
                 {sourceType === 'youtube' && <Alert type="info">For YouTube, 'channel' (Title + ID) is automatically selected as the account source.</Alert>}
                 {sourceType === 'tiktok' && <Alert type="info">For TikTok, 'author' (Name + Region) is automatically selected as the account source.</Alert>}
+                
+                {sourceType === 'telegram' && (
+                  <div className="flex flex-wrap gap-6 mt-4">
+                    <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                      <input 
+                        type="radio" 
+                        value="telegram_channel" 
+                        checked={accountSource === 'telegram_channel'} 
+                        onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} 
+                        className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                      />
+                      Channel (<code>channel_name</code>, <code>channel_id</code>)
+                    </label>
+                    <label className="flex items-center hover:text-[#00926c] cursor-pointer">
+                      <input 
+                        type="radio" 
+                        value="telegram_author" 
+                        checked={accountSource === 'telegram_author'} 
+                        onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} 
+                        className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                      />
+                      Author (<code>post_author</code>, <code>sender_id</code>)
+                    </label>
+                  </div>
+                )}
 
                 {(sourceType === 'facebook' || sourceType === 'instagram') && (
                   <div className="flex flex-wrap gap-6 mt-4">
@@ -435,6 +496,7 @@ function App() {
             {step3Enabled && (
               <>
                 {sourceType === 'bluesky' && <Alert type="info">For BlueSky, 'text' (post content) is automatically selected as the Object ID.</Alert>}
+                {sourceType === 'telegram' && <Alert type="info">For Telegram, 'message_text' is automatically selected as the Object ID source.</Alert>}
 
                 {sourceType === 'youtube' && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -521,6 +583,7 @@ function App() {
                      {sourceType === 'bluesky' && <Alert type="info">Required BlueSky (Communalytic) columns: 'id', 'date', 'username', 'text'</Alert>}
                      {sourceType === 'youtube' && <Alert type="info">Required YouTube Data Tools columns: 'videoId', 'channelTitle', 'channelId', 'publishedAt', and your selected Object ID source ('videoTitle', 'videoDescription', or 'tags')</Alert>}
                      {sourceType === 'tiktok' && <Alert type="info">Required TikTok columns: 'video_id', 'author_name', 'create_time', and your selected Object ID source</Alert>}
+                     {sourceType === 'telegram' && <Alert type="info">Required Telegram columns: 'channel_name', 'channel_id', 'message_id', 'date', 'sender_id', 'post_author', 'message_text'</Alert>}
                      {(sourceType === 'facebook' || sourceType === 'instagram') && <Alert type="info">Required Meta columns: 'id', 'creation_time', 'text' (if chosen), 'link_attachment.link' (if chosen, Facebook only), and the ID/Name fields corresponding to your Account Source choice (<code>post_owner.*</code> or <code>surface.*</code>)</Alert>}
                  </>
              )}
@@ -555,7 +618,7 @@ function App() {
 
         {/* Footer */}
         <div className="bg-gray-50 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
-          <p>CSDS Pre-processor v1.1.1 - UI Enhancements</p>
+          <p>CSDS Pre-processor v1.2.0 - Added Telegram Support</p>
           <p className="mt-1">
             <a
               href="https://github.com/fabiogiglietto/csds-preprocessor"
