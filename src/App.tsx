@@ -586,7 +586,8 @@ function App() {
             </h1>
             {/* CORRECTED LINE */}
             <p className="mt-2 text-center text-xs sm:text-sm opacity-90 max-w-3xl mx-auto">
-                 Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. Handles large files (>{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
+            Transform CSV data from Meta, TikTok, BlueSky, YouTube, and Telegram into the standard CSDS format. 
+            Handles large files (&gt;{CSDS_SIZE_LIMIT_MB}MB) via Sampling or Splitting.
             </p>
         </div>
 
