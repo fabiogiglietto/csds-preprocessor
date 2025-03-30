@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
-import JSZip from 'jszip';
 
 // Updated type definitions to include Telegram
 type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | 'telegram' | null;
@@ -65,6 +64,7 @@ const Alert: React.FC<AlertProps> = ({ type, children }) => {
   );
 };
 
+
 // --- Main App Component ---
 
 function App() {
@@ -77,9 +77,7 @@ function App() {
   const [skippedRows, setSkippedRows] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string>('');
-  // For file size modal
-  const [showSizeModal, setShowSizeModal] = useState<boolean>(false);
-  const [estimatedFileSizeMB, setEstimatedFileSizeMB] = useState<number>(0);
+
   const resetState = () => {
     setTransformedData(null);
     setFeedbackMessage(null);
@@ -140,7 +138,6 @@ function App() {
     setSkippedRows(0);
     setFileName('');
   };
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -161,9 +158,10 @@ function App() {
         return;
     }
 
+
     Papa.parse(file, {
       header: true,
-      dynamicTyping: true,
+      dynamicTyping: true, // Be careful with this, might infer wrong types
       skipEmptyLines: true,
       complete: (results) => {
         try {
@@ -176,9 +174,9 @@ function App() {
             return;
           }
 
-          // Row validation and transformation logic
+          // Row validation and transformation logic (keep as is, but ensure robustness)
           const transformed = results.data
-            .map((row: any, index: number) => {
+            .map((row: any, index: number) => { // Add index for potential logging
                 // Check for required fields based on source type and selections
                 let isValid = false;
                 let accountIdVal: string | number | undefined;
@@ -248,6 +246,7 @@ function App() {
                     isValid = false;
                 }
 
+
                 if (!isValid) {
                     skipped++;
                     return null; // Skip invalid rows
@@ -312,6 +311,7 @@ function App() {
             })
             .filter((row): row is CSDSRow => row !== null); // Filter out nulls (skipped rows)
 
+
           setSkippedRows(skipped);
           setProcessedRows(transformed.length);
 
@@ -325,16 +325,15 @@ function App() {
           const estimatedSizeMB = new Blob([csvContent]).size / (1024 * 1024);
 
           setTransformedData(transformed);
-          setEstimatedFileSizeMB(estimatedSizeMB);
           setIsLoading(false);
 
-          // Check if file exceeds size limit and show modal if needed
-          if (estimatedSizeMB > 15) {
-            setFeedbackMessage({ type: 'warning', text: `Processed ${transformed.length} rows successfully. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Warning: The transformed file size (${estimatedSizeMB.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service.` });
-            setShowSizeModal(true); // Show modal with options
-          } else {
-            setFeedbackMessage({ type: 'success', text: `Successfully processed ${transformed.length} rows from ${fileName}. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Ready for download.` });
-          }
+          // Set success/warning message AFTER setting data
+           if (estimatedSizeMB > 15) {
+               setFeedbackMessage({ type: 'warning', text: `Processed ${transformed.length} rows successfully. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Warning: The transformed file size (${estimatedSizeMB.toFixed(1)}MB) exceeds the 15MB limit of the Coordinated Sharing Detection Service. Consider reducing the input file size.` });
+           } else {
+               setFeedbackMessage({ type: 'success', text: `Successfully processed ${transformed.length} rows from ${fileName}. ${skipped > 0 ? `(${skipped} rows skipped).` : ''} Ready for download.` });
+           }
+
         } catch (err) {
           console.error('Processing error:', err);
           setFeedbackMessage({ type: 'error', text: `Error processing file: ${err instanceof Error ? err.message : 'Unknown error'}` });
@@ -367,167 +366,6 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  // File size solution methods
-  
-  const handleSplitDownload = () => {
-    if (!transformedData) return;
-    
-    // Calculate optimal chunk size based on average row size
-    const csvContent = Papa.unparse(transformedData);
-    const totalSize = new Blob([csvContent]).size;
-    const avgRowSize = totalSize / transformedData.length;
-    
-    // Target 14MB per file to be safe
-    const maxBytesPerFile = 14 * 1024 * 1024; 
-    const rowsPerChunk = Math.floor(maxBytesPerFile / avgRowSize);
-    
-    // Split data into chunks
-    const chunks = [];
-    for (let i = 0; i < transformedData.length; i += rowsPerChunk) {
-      chunks.push(transformedData.slice(i, i + rowsPerChunk));
-    }
-    
-    // Create zip file containing all chunks
-    const zip = new JSZip();
-    
-    chunks.forEach((chunk, index) => {
-      const chunkCsv = Papa.unparse(chunk);
-      zip.file(`${sourceType}_csds_part${index+1}_of_${chunks.length}.csv`, chunkCsv);
-    });
-    
-    // Generate and download the zip file
-    zip.generateAsync({type: "blob"}).then(function(content) {
-      const url = URL.createObjectURL(content);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${sourceType}_csds_split_files.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    });
-    
-    setShowSizeModal(false);
-  };
-  
-  const handleTimeBasedSplit = (periodInDays = 30) => {
-    if (!transformedData) return;
-    
-    // Group data by time periods
-    const periodGroups = new Map();
-    
-    transformedData.forEach(row => {
-      // Convert timestamp to date and format based on period
-      const date = new Date(row.timestamp_share * 1000);
-      
-      let periodKey;
-      if (periodInDays === 30) {
-        // Monthly grouping
-        periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      } else if (periodInDays === 90) {
-        // Quarterly grouping
-        const quarter = Math.floor(date.getMonth() / 3) + 1;
-        periodKey = `${date.getFullYear()}-Q${quarter}`;
-      } else {
-        // Weekly or custom grouping
-        // Get ISO week number
-        const startOfYear = new Date(date.getFullYear(), 0, 1);
-        const weekNum = Math.ceil((((date.getTime() - startOfYear.getTime()) / 86400000) + startOfYear.getDay() + 1) / 7);
-        periodKey = `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-      }
-      
-      if (!periodGroups.has(periodKey)) {
-        periodGroups.set(periodKey, []);
-      }
-      
-      periodGroups.get(periodKey).push(row);
-    });
-    
-    // Create zip with period-based files
-    const zip = new JSZip();
-    
-    // Sort period keys for better organization
-    const sortedKeys = Array.from(periodGroups.keys()).sort();
-    
-    sortedKeys.forEach(periodKey => {
-      const rows = periodGroups.get(periodKey);
-      const periodCsv = Papa.unparse(rows);
-      zip.file(`${sourceType}_csds_${periodKey}.csv`, periodCsv);
-    });
-    
-    // Generate and download
-    zip.generateAsync({type: "blob"}).then(function(content) {
-      const url = URL.createObjectURL(content);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${sourceType}_csds_by_period.zip`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    });
-    
-    setShowSizeModal(false);
-  };
-  
-  const handleStratifiedSampling = (samplePercentage = 50) => {
-    if (!transformedData) return;
-    
-    // Group by account_id to preserve account distribution
-    const accountGroups = new Map();
-    
-    transformedData.forEach(row => {
-      if (!accountGroups.has(row.account_id)) {
-        accountGroups.set(row.account_id, []);
-      }
-      accountGroups.get(row.account_id).push(row);
-    });
-    
-    // Sample from each account group to maintain distribution
-    const sampledData: CSDSRow[] = [];
-    
-    accountGroups.forEach(rows => {
-      const sampleSize = Math.max(1, Math.ceil(rows.length * (samplePercentage / 100)));
-      
-      // Shuffle rows using Fisher-Yates
-      for (let i = rows.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [rows[i], rows[j]] = [rows[j], rows[i]];
-      }
-      
-      // Take sample
-      sampledData.push(...rows.slice(0, sampleSize));
-    });
-    
-    // Check if the sample is still too large
-    const sampleCsv = Papa.unparse(sampledData);
-    const sampleSize = new Blob([sampleCsv]).size / (1024 * 1024);
-    
-    if (sampleSize > 15) {
-      setFeedbackMessage({ 
-        type: 'warning', 
-        text: `The ${samplePercentage}% sample (${sampledData.length} rows) is still ${sampleSize.toFixed(1)}MB, exceeding the 15MB limit. Try a smaller percentage or another option.` 
-      });
-      return;
-    }
-    
-    // Generate CSV and download
-    const blob = new Blob([sampleCsv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${sourceType}_csds_sampled_${samplePercentage}pct.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    setShowSizeModal(false);
-    setFeedbackMessage({ 
-      type: 'success', 
-      text: `Successfully created a ${samplePercentage}% sample (${sampledData.length} rows) from your data.` 
-    });
-  };
   // Determine if the next step should be enabled
   const step2Enabled = !!sourceType;
   const step3Enabled = step2Enabled && !!accountSource;
@@ -536,7 +374,6 @@ function App() {
   const getStepClasses = (enabled: boolean) => {
       return `bg-gray-50 rounded-lg p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50'}`;
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 py-8 px-4 font-['Comfortaa'] text-[#3d3d3c]">
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden">
@@ -567,9 +404,10 @@ function App() {
                 <label key={platform} className={`flex items-center p-3 border rounded-lg transition-colors duration-200 cursor-pointer ${sourceType === platform ? 'border-[#00926c] bg-[#00926c]/10 ring-2 ring-[#00926c]' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-100'}`}>
                   <input
                     type="radio"
+                    name="sourceType"
                     value={platform}
                     checked={sourceType === platform}
-                    onChange={(e) => handleSourceTypeChange(e.target.value as SourceType)}
+                    onChange={() => handleSourceTypeChange(platform)}
                     className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c] border-gray-300"
                   />
                    {platform.charAt(0).toUpperCase() + platform.slice(1)}
@@ -607,9 +445,10 @@ function App() {
                     <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                       <input 
                         type="radio" 
+                        name="accountSource"
                         value="telegram_channel" 
                         checked={accountSource === 'telegram_channel'} 
-                        onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} 
+                        onChange={() => handleAccountSourceChange('telegram_channel')} 
                         className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
                       />
                       Channel (<code>channel_name</code>, <code>channel_id</code>)
@@ -617,9 +456,10 @@ function App() {
                     <label className="flex items-center hover:text-[#00926c] cursor-pointer">
                       <input 
                         type="radio" 
+                        name="accountSource"
                         value="telegram_author" 
                         checked={accountSource === 'telegram_author'} 
-                        onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} 
+                        onChange={() => handleAccountSourceChange('telegram_author')} 
                         className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
                       />
                       Author (<code>post_author</code>, <code>sender_id</code>)
@@ -630,12 +470,26 @@ function App() {
                 {(sourceType === 'facebook' || sourceType === 'instagram') && (
                   <div className="flex flex-wrap gap-6 mt-4">
                     <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                      <input type="radio" value="post_owner" checked={accountSource === 'post_owner'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                      <input 
+                        type="radio" 
+                        name="accountSource"
+                        value="post_owner" 
+                        checked={accountSource === 'post_owner'} 
+                        onChange={() => handleAccountSourceChange('post_owner')} 
+                        className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                      />
                       Post Owner (<code>post_owner.id</code>, <code>post_owner.name</code>)
                     </label>
                     {sourceType === 'facebook' && (
                       <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                        <input type="radio" value="surface" checked={accountSource === 'surface'} onChange={(e) => handleAccountSourceChange(e.target.value as AccountSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                        <input 
+                          type="radio" 
+                          name="accountSource"
+                          value="surface" 
+                          checked={accountSource === 'surface'} 
+                          onChange={() => handleAccountSourceChange('surface')} 
+                          className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                        />
                         Surface (<code>surface.id</code>, <code>surface.name</code>)
                       </label>
                     )}
@@ -643,7 +497,7 @@ function App() {
                 )}
               </>
             )}
-          </div>
+            </div>
 
           {/* Step 3: Object ID Selection */}
           <div className={getStepClasses(step3Enabled)}>
@@ -661,7 +515,14 @@ function App() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                     {(['videoTitle', 'videoDescription', 'tags'] as const).map(opt => (
                        <label key={opt} className={`flex items-center p-3 border rounded-lg transition-colors duration-200 cursor-pointer ${objectIdSource === opt ? 'border-[#00926c] bg-[#00926c]/10 ring-2 ring-[#00926c]' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-100'}`}>
-                         <input type="radio" value={opt} checked={objectIdSource === opt} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                         <input 
+                           type="radio"
+                           name="objectIdSource" 
+                           value={opt} 
+                           checked={objectIdSource === opt} 
+                           onChange={() => handleObjectIdSourceChange(opt)} 
+                           className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                         />
                          {opt.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                        </label>
                     ))}
@@ -671,7 +532,14 @@ function App() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                        {(['video_description', 'voice_to_text', 'video_url', 'effect_ids', 'music_id', 'hashtag_names'] as const).map(opt => (
                            <label key={opt} className={`flex items-center p-3 border rounded-lg transition-colors duration-200 cursor-pointer ${objectIdSource === opt ? 'border-[#00926c] bg-[#00926c]/10 ring-2 ring-[#00926c]' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-100'}`}>
-                               <input type="radio" value={opt} checked={objectIdSource === opt} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                               <input 
+                                 type="radio"
+                                 name="objectIdSource" 
+                                 value={opt} 
+                                 checked={objectIdSource === opt} 
+                                 onChange={() => handleObjectIdSourceChange(opt)} 
+                                 className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                               />
                                {opt.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                            </label>
                        ))}
@@ -680,12 +548,26 @@ function App() {
                 {(sourceType === 'facebook' || sourceType === 'instagram') && (
                   <div className="flex flex-wrap gap-6 mt-4">
                      <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                       <input type="radio" value="text" checked={objectIdSource === 'text'} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                       <input 
+                         type="radio"
+                         name="objectIdSource" 
+                         value="text" 
+                         checked={objectIdSource === 'text'} 
+                         onChange={() => handleObjectIdSourceChange('text')} 
+                         className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                       />
                        Text content (<code>text</code>)
                      </label>
                      {sourceType === 'facebook' && (
                        <label className="flex items-center hover:text-[#00926c] cursor-pointer">
-                         <input type="radio" value="link" checked={objectIdSource === 'link'} onChange={(e) => handleObjectIdSourceChange(e.target.value as ObjectIdSource)} className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" />
+                         <input 
+                           type="radio"
+                           name="objectIdSource" 
+                           value="link" 
+                           checked={objectIdSource === 'link'} 
+                           onChange={() => handleObjectIdSourceChange('link')} 
+                           className="mr-2 h-4 w-4 text-[#00926c] focus:ring-[#00926c]" 
+                         />
                          Link attachment (<code>link_attachment.link</code>)
                        </label>
                      )}
@@ -775,17 +657,6 @@ function App() {
           )}
         </div>
 
-        {/* File Size Modal */}
-        <FileSizeModal
-          isOpen={showSizeModal}
-          onClose={() => setShowSizeModal(false)}
-          onSplit={handleSplitDownload}
-          onTimeSplit={handleTimeBasedSplit}
-          onSample={handleStratifiedSampling}
-          fileSize={estimatedFileSizeMB}
-          rowCount={transformedData?.length || 0}
-        />
-
         {/* Footer */}
         <div className="bg-gray-50 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
           <p>CSDS Pre-processor v1.2.0 - Added Telegram Support</p>
@@ -808,4 +679,3 @@ function App() {
 }
 
 export default App;
-  
