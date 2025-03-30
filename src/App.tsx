@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
+import JSZip from 'jszip';
+import FileSizeModal from './components/FileSizeModal';
 
 // Updated type definitions to include Telegram
 type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | 'telegram' | null;
