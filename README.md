@@ -6,19 +6,29 @@ This work was carried out in the context of the [VERA.AI project](https://veraai
 
 ## Features
 
-- Converts data from multiple platforms to CSDS format:
+- **Multi-platform Support**: Converts data from various platforms to CSDS format:
   - Meta Content Library (Facebook and Instagram)
   - TikTok Research API
   - YouTube (via YouTube Data Tools)
   - BlueSky (via Communalytic)
   - Telegram
-- Platform-specific data mapping options
-- Advanced file size handling:
+- **Flexible Data Mapping**:
+  - Customizable account source selection (e.g., post owner vs. surface for Meta platforms)
+  - Multiple object ID source options for each platform (e.g., text content, links, descriptions)
+  - Platform-specific field mappings with proper validation
+- **Advanced File Size Management**:
   - Automatic file splitting for large datasets (>15MB)
-  - Time-based splitting (weekly, monthly, quarterly)
-  - Stratified sampling to maintain account distribution
-- Client-side processing (no data is sent to any server)
-- Detailed processing feedback with counts of processed and skipped rows
+  - Time-based splitting (weekly, monthly, quarterly) for temporal analysis
+  - Stratified sampling that maintains account distribution with adjustable sample percentage
+- **Data Processing Features**:
+  - Client-side processing (privacy-focused - no data sent to any server)
+  - Detailed processing feedback with counts of processed and skipped rows
+  - Automatic timestamp conversion to UNIX format
+  - CSV validation with error handling and feedback
+- **Export Options**:
+  - Direct CSV download for standard-sized files
+  - ZIP archive download for split files
+  - Descriptive naming conventions for output files
 
 ## Input Formats
 
@@ -38,7 +48,13 @@ The tool supports TikTok Research API CSV exports with the following required fi
 - video_id (content identifier)
 - author_name (account identifier)
 - create_time (post timestamp)
-- Various content fields like video_description, voice_to_text, video_url, etc.
+- Various content fields available as object_id source:
+  - video_description
+  - voice_to_text
+  - video_url
+  - effect_ids
+  - music_id
+  - hashtag_names
 
 ### YouTube (via YouTube Data Tools)
 
@@ -47,7 +63,10 @@ The tool supports CSV files from the [YouTube Data Tools Video List function](ht
 - channelTitle (channel name)
 - channelId (account identifier)
 - publishedAt (video timestamp)
-- videoTitle, videoDescription, or tags (content fields)
+- Content options (select one):
+  - videoTitle
+  - videoDescription
+  - tags
 
 ### BlueSky (via Communalytic)
 
@@ -68,11 +87,15 @@ The tool supports Telegram data with the following required fields:
 - post_author (author name)
 - message_text (message content)
 
+Two account source options:
+- Channel (uses channel_name and channel_id)
+- Author (uses post_author and sender_id)
+
 ## Output Format (CSDS)
 
 Regardless of the input source, the tool generates a standardized CSV file with the following columns:
 
-- `account_id`: Unique ID of an account
+- `account_id`: Unique ID of an account (formatted as name + ID for most platforms)
 - `content_id`: Unique ID of the content (post, video, message, etc.)
 - `object_id`: Content identifier (text, link, description, etc. based on selected option)
 - `timestamp_share`: UNIX timestamp of the content creation
@@ -81,9 +104,18 @@ Regardless of the input source, the tool generates a standardized CSV file with 
 
 The CSDS service has a 15MB file size limit. For datasets that exceed this limit, the tool offers three options:
 
-1. **Split Into Multiple Files**: Automatically divides your data into multiple files under 15MB each and packages them in a ZIP archive.
-2. **Split By Time Period**: Divides data into separate files by time periods (weekly, monthly, or quarterly) for more focused analysis.
-3. **Sample Data**: Creates a representative sample while maintaining account distribution. You can adjust the sample size percentage.
+1. **Split Into Multiple Files**: Automatically divides your data into multiple files under 15MB each and packages them in a ZIP archive. The split is based on row count to ensure files stay under the limit.
+
+2. **Split By Time Period**: Divides data into separate files by time periods for more focused analysis:
+   - Weekly (7-day periods)
+   - Monthly (30-day periods)
+   - Quarterly (90-day periods)
+   Files are bundled into a ZIP archive with appropriate naming.
+
+3. **Sample Data**: Creates a representative sample while maintaining account distribution:
+   - Adjustable sample size percentage (10-90%)
+   - Ensures all accounts are represented in the sample
+   - Preserves the original distribution of content across accounts
 
 ## Usage
 
@@ -92,8 +124,9 @@ The CSDS service has a 15MB file size limit. For datasets that exceed this limit
 3. Choose the account source field based on your platform
 4. Select the object_id source field based on your platform and needs
 5. Upload your CSV file
-6. If the file exceeds 15MB, select a file size management option
-7. Download the transformed CSV file(s) ready for the [Coordinated Sharing Detection Service](https://coortweet.lab.atc.gr/) powered by [CooRTweet](https://github.com/nicolarighetti/CooRTweet)
+6. Review processing feedback and row counts
+7. If the file exceeds 15MB, select a file size management option
+8. Download the transformed CSV file(s) ready for the [Coordinated Sharing Detection Service](https://coortweet.lab.atc.gr/) powered by [CooRTweet](https://github.com/nicolarighetti/CooRTweet)
 
 ## Development
 
@@ -118,6 +151,12 @@ npm install
 
 # Start the development server
 npm run dev
+
+# Build for production
+npm run build
+
+# Deploy to GitHub Pages
+npm run deploy
 ```
 
 ## License
