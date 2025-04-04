@@ -8,7 +8,7 @@ import FileSizeModal from './components/FileSizeModal';
 type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | 'telegram' | null;
 type AccountSource = 'post_owner' | 'surface' | 'author' | 'username' | 'channel' | 'telegram_channel' | 'telegram_author' | null;
 type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' |
-                      'video_url' | 'effect_ids' | 'music_id' | 'hashtag_names' |
+                      'effect_ids' | 'music_id' | 'hashtag_names' |
                       'videoTitle' | 'videoDescription' | 'tags' | 'message_text' | null;
 
 // --- Helper Components for Messages/Alerts ---
@@ -225,13 +225,12 @@ function App() {
                         switch (objectIdSource) {
                             case 'video_description': objectIdSourceVal = row.video_description; break;
                             case 'voice_to_text': objectIdSourceVal = row.voice_to_text; break;
-                            case 'video_url': objectIdSourceVal = row.video_url; break;
                             case 'effect_ids': objectIdSourceVal = row.effect_ids; break; // Allow 0 or empty array
                             case 'music_id': objectIdSourceVal = row.music_id; break; // Allow 0 or empty string
                             case 'hashtag_names': objectIdSourceVal = row.hashtag_names; break;
                         }
                         // Check for presence and non-empty string for text-based fields, allow falsy for others if selected
-                        const objectIdRequired = ['video_description', 'voice_to_text', 'video_url', 'hashtag_names'].includes(objectIdSource || '');
+                        const objectIdRequired = ['video_description', 'voice_to_text', 'hashtag_names'].includes(objectIdSource || '');
                         const objectIdCheckPassed = objectIdRequired ? Boolean(objectIdSourceVal) : (objectIdSourceVal !== undefined && objectIdSourceVal !== null);
 
                         isValid = Boolean(accountIdVal && contentIdVal && timestampVal && objectIdCheckPassed);
@@ -651,7 +650,7 @@ function App() {
                 )}
                 {sourceType === 'tiktok' && (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-                       {(['video_description', 'voice_to_text', 'video_url', 'effect_ids', 'music_id', 'hashtag_names'] as const).map(opt => (
+                       {(['video_description', 'voice_to_text', 'effect_ids', 'music_id', 'hashtag_names'] as const).map(opt => (
                            <label key={opt} className={`flex items-center p-3 border rounded-lg transition-colors duration-200 cursor-pointer ${objectIdSource === opt ? 'border-[#00926c] bg-[#00926c]/10 ring-2 ring-[#00926c]' : 'border-gray-200 hover:border-gray-400 hover:bg-gray-100'}`}>
                                <input 
                                  type="radio"

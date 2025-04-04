@@ -55,7 +55,6 @@ Required fields:
 - Various content fields available as object_id source:
   - `video_description`
   - `voice_to_text`
-  - `video_url`
   - `effect_ids`
   - `music_id`
   - `hashtag_names`
@@ -183,8 +182,10 @@ Fabio Giglietto - [@fabiogiglietto](https://github.com/fabiogiglietto)
 
 [CooRTweet](https://github.com/nicolarighetti/CooRTweet) is a flexible engine that detects coordinated sharing behavior on social media platforms. Developed by Nicola Righetti and Paul Balluff, it builds on existing research on coordinated behavior to provide a tool for detecting various coordinated networks across multiple social media platforms.
 
-## 🆕 Recent Updates (v1.1.1)
+## 🆕 Recent Updates (v1.2.1)
 
+- Removed "Video Url" option from TikTok platform source
+- Added Telegram support
 - Fixed duplicate links in the App interface
 - Improved documentation for clearer user guidance
 - Implemented enhanced strategies for handling large datasets
