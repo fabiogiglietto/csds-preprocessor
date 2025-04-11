@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { CSDSRow } from './types';
 import JSZip from 'jszip';
 import FileSizeModal from './components/FileSizeModal';
+import TextSimilarityOptions from './components/TextSimilarityOptions';
+import ClusteringProgress from './components/ClusteringProgress';
+import ClusteringResults from './components/ClusteringResults';
+import textSimilarityService from './services/textSimilarityService';
+import { ClusteringProgress as ProgressType, ClusteringResult, TextSimilarityConfig } from './services/textSimilarityService';
+import Alert from './components/Alert';
 
 // Updated type definitions to include Telegram
 type SourceType = 'facebook' | 'instagram' | 'tiktok' | 'bluesky' | 'youtube' | 'telegram' | null;
@@ -10,62 +16,6 @@ type AccountSource = 'post_owner' | 'surface' | 'author' | 'username' | 'channel
 type ObjectIdSource = 'text' | 'link' | 'video_description' | 'voice_to_text' |
                       'effect_ids' | 'music_id' | 'hashtag_names' |
                       'videoTitle' | 'videoDescription' | 'tags' | 'message_text' | null;
-
-// --- Helper Components for Messages/Alerts ---
-
-interface AlertProps {
-  type: 'info' | 'success' | 'warning' | 'error';
-  children: React.ReactNode;
-}
-
-const Alert: React.FC<AlertProps> = ({ type, children }) => {
-  const baseClasses = "p-4 rounded-lg border mt-2";
-  let specificClasses = "";
-  let IconComponent: React.ElementType | null = null;
-
-  switch (type) {
-    case 'info':
-      specificClasses = "bg-blue-50 border-blue-200 text-blue-800";
-      IconComponent = () => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-        </svg>
-      );
-      break;
-    case 'success':
-      specificClasses = "bg-green-50 border-green-200 text-green-800";
-       IconComponent = () => (
-         <svg className="h-5 w-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-         </svg>
-       );
-      break;
-    case 'warning': // Used for file size > 15MB
-      specificClasses = "bg-yellow-50 border-yellow-200 text-yellow-800";
-      IconComponent = () => (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-             <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 3.001-1.742 3.001H4.42c-1.53 0-2.493-1.667-1.743-3.001l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1.75-5.75a.75.75 0 00-1.5 0v4a.75.75 0 001.5 0v-4z" clipRule="evenodd" />
-          </svg>
-      );
-      break;
-    case 'error':
-      specificClasses = "bg-red-50 border-red-200 text-red-800";
-       IconComponent = () => (
-         <svg className="h-5 w-5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-         </svg>
-       );
-      break;
-  }
-
-  return (
-    <div className={`${baseClasses} ${specificClasses} flex items-start`}>
-      {IconComponent && <IconComponent />}
-      <div className="flex-grow">{children}</div>
-    </div>
-  );
-};
-// --- Main App Component ---
 
 function App() {
   const [sourceType, setSourceType] = useState<SourceType>(null);
@@ -81,6 +31,14 @@ function App() {
   // State variables for file size modal
   const [showSizeModal, setShowSizeModal] = useState<boolean>(false);
   const [estimatedFileSizeMB, setEstimatedFileSizeMB] = useState<number>(0);
+
+  // State variables for text similarity clustering
+  const [textSimilarityEnabled, setTextSimilarityEnabled] = useState<boolean>(false);
+  const [textSimilarityConfig, setTextSimilarityConfig] = useState<TextSimilarityConfig | null>(null);
+  const [clusteringProgress, setClusteringProgress] = useState<ProgressType | null>(null);
+  const [clusteringResult, setClusteringResult] = useState<ClusteringResult | null>(null);
+  const [uniqueTexts, setUniqueTexts] = useState<string[]>([]);
+  const [originalToClusterMapping, setOriginalToClusterMapping] = useState<Record<string, string>>({});
   
   const resetState = () => {
     setTransformedData(null);
@@ -89,6 +47,12 @@ function App() {
     setSkippedRows(0);
     setIsLoading(false);
     setFileName('');
+    setTextSimilarityEnabled(false);
+    setTextSimilarityConfig(null);
+    setClusteringProgress(null);
+    setClusteringResult(null);
+    setUniqueTexts([]);
+    setOriginalToClusterMapping({});
     // Keep source type, account source, object ID source if user might re-upload
   };
 
@@ -141,7 +105,111 @@ function App() {
     setProcessedRows(0);
     setSkippedRows(0);
     setFileName('');
+    setUniqueTexts([]);
   };
+
+  // Extract unique texts from the transformed data
+  const extractUniqueTexts = (data: CSDSRow[]): string[] => {
+    const uniqueSet = new Set<string>();
+    
+    data.forEach(row => {
+      if (row.object_id) {
+        uniqueSet.add(row.object_id);
+      }
+    });
+    
+    return Array.from(uniqueSet);
+  };
+
+  // Function to handle the start of clustering
+  const handleStartClustering = async () => {
+    if (!textSimilarityConfig || !transformedData || uniqueTexts.length === 0) {
+      return;
+    }
+    
+    try {
+      // Initialize clustering service
+      await textSimilarityService.initialize(textSimilarityConfig);
+      
+      // Reset any previous results
+      setClusteringResult(null);
+      
+      // Set initial progress state
+      setClusteringProgress({
+        stage: 'modelLoading',
+        percent: 0,
+        message: 'Initializing...'
+      });
+      
+      // Start processing with progress updates
+      const result = await textSimilarityService.processTexts(
+        uniqueTexts,
+        (progress) => {
+          setClusteringProgress(progress);
+        }
+      );
+      
+      // Store results
+      setClusteringResult(result);
+      
+      // Create a mapping from original text to cluster label
+      const mapping: Record<string, string> = {};
+      uniqueTexts.forEach(text => {
+        const clusterId = result.mapping[text];
+        if (clusterId !== undefined) {
+          const cluster = result.clusters.find(c => c.id === clusterId);
+          if (cluster) {
+            mapping[text] = cluster.label;
+          }
+        }
+      });
+      
+      setOriginalToClusterMapping(mapping);
+      
+      // Clear progress after completion
+      setClusteringProgress(null);
+      
+    } catch (error) {
+      console.error('Clustering error:', error);
+      setFeedbackMessage({ 
+        type: 'error', 
+        text: `Error processing text clusters: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+      setClusteringProgress(null);
+    }
+  };
+
+  // Function to handle cancellation
+  const handleCancelClustering = () => {
+    textSimilarityService.cancel();
+    setClusteringProgress(null);
+  };
+
+  // Function to apply clustering results to the data
+  const handleUseClusteringResults = () => {
+    if (!transformedData || !originalToClusterMapping) {
+      return;
+    }
+    
+    // Apply the mapping to create a new version of the transformedData
+    const clusteredData = transformedData.map(row => ({
+      ...row,
+      object_id: originalToClusterMapping[row.object_id] || row.object_id
+    }));
+    
+    // Update the transformed data
+    setTransformedData(clusteredData);
+    
+    // Clear results view
+    setClusteringResult(null);
+    
+    // Show success message
+    setFeedbackMessage({ 
+      type: 'success', 
+      text: `Successfully applied cluster labels to object IDs. Ready for download.` 
+    });
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -321,6 +389,28 @@ function App() {
             return;
           }
 
+          // Extract unique texts after successful processing
+          if (transformed.length > 0 && objectIdSource) {
+            const uniqueObjectIds = extractUniqueTexts(transformed);
+            setUniqueTexts(uniqueObjectIds);
+            
+            // If text object ID source is selected and there are many texts, suggest similarity clustering
+            const isTextSource = 
+              objectIdSource === 'text' || 
+              objectIdSource === 'videoTitle' || 
+              objectIdSource === 'videoDescription' || 
+              objectIdSource === 'video_description' || 
+              objectIdSource === 'message_text';
+              
+            if (isTextSource && uniqueObjectIds.length > 50) {
+              // Suggest clustering in the feedback message
+              setFeedbackMessage({ 
+                type: 'info', 
+                text: `Successfully processed ${transformed.length} rows with ${uniqueObjectIds.length} unique text messages. Consider using Text Similarity Clustering to identify coordinated messaging patterns.` 
+              });
+            }
+          }
+
           const csvContent = Papa.unparse(transformed);
           const estimatedSizeMB = new Blob([csvContent]).size / (1024 * 1024);
 
@@ -350,6 +440,7 @@ function App() {
       }
     });
   };
+
   const handleDownload = () => {
     if (!transformedData) return;
 
@@ -485,6 +576,13 @@ function App() {
       text: `Successfully created a ${percentage}% sample (${sampledData.length} rows) while maintaining account distribution.` 
     });
   };
+  
+  // Clean up text similarity service on unmount
+  useEffect(() => {
+    return () => {
+      textSimilarityService.dispose();
+    };
+  }, []);
 
   // Determine if the next step should be enabled
   const step2Enabled = !!sourceType;
@@ -494,6 +592,7 @@ function App() {
   const getStepClasses = (enabled: boolean) => {
       return `bg-gray-50 rounded-lg p-6 transition-opacity duration-300 ${enabled ? 'opacity-100' : 'opacity-50'}`;
   };
+  
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200 py-8 px-4 font-['Comfortaa'] text-[#3d3d3c]">
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden">
@@ -750,6 +849,63 @@ function App() {
              )}
           </div>
 
+          {/* Text Similarity Clustering Option */}
+          {step4Enabled && objectIdSource && (
+            ['text', 'videoTitle', 'videoDescription', 'video_description', 'message_text'].includes(objectIdSource) && 
+            transformedData && transformedData.length > 0 && (
+              <div className="mt-6">
+                <TextSimilarityOptions
+                  isEnabled={textSimilarityEnabled}
+                  onEnableChange={setTextSimilarityEnabled}
+                  onConfigChange={setTextSimilarityConfig}
+                  dataSize={uniqueTexts.length}
+                  sourceType={sourceType || ''}
+                />
+                
+                {textSimilarityEnabled && textSimilarityConfig && !clusteringProgress && !clusteringResult && (
+                  <div className="mt-4">
+                    <button
+                      onClick={handleStartClustering}
+                      className="w-full flex justify-center items-center bg-[#00926c] text-white px-6 py-2 rounded-lg
+                        hover:bg-[#007d5c] transition-colors duration-200
+                        focus:outline-none focus:ring-2 focus:ring-[#00926c] focus:ring-offset-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z" />
+                      </svg>
+                      Process {uniqueTexts.length} Unique Texts into Similarity Clusters
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          )}
+
+          {/* Clustering Progress Modal */}
+          {clusteringProgress && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="max-w-lg w-full">
+                <ClusteringProgress 
+                  progress={clusteringProgress} 
+                  onCancel={handleCancelClustering} 
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Clustering Results Modal */}
+          {clusteringResult && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="max-w-5xl w-full max-h-[90vh] overflow-auto">
+                <ClusteringResults 
+                  results={clusteringResult} 
+                  onClose={() => setClusteringResult(null)} 
+                  onUseResults={handleUseClusteringResults} 
+                />
+              </div>
+            </div>
+          )}
+
           {/* Feedback Area */}
           {feedbackMessage && (
               <Alert type={feedbackMessage.type}>
@@ -790,7 +946,7 @@ function App() {
 
         {/* Footer */}
         <div className="bg-gray-50 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
-          <p>CSDS Pre-processor v1.2.0 - Added Telegram Support</p>
+          <p>CSDS Pre-processor v1.3.0 - Added Text Similarity Clustering</p>
           <p className="mt-1">
             <a href="https://github.com/fabiogiglietto/csds-preprocessor"
               target="_blank"
