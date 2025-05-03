@@ -234,6 +234,8 @@ function App() {
       header: true,
       dynamicTyping: true, // Be careful with this, might infer wrong types
       skipEmptyLines: true,
+      quoteChar: '"', // Ensure quotes are properly handled
+      escapeChar: '"', // Double quotes within quoted fields are escaped
       complete: (results) => {
         try {
           let skipped = 0;
@@ -245,7 +247,7 @@ function App() {
             return;
           }
 
-          // Row validation and transformation logic (keep as is, but ensure robustness)
+          // Row validation and transformation logic (with improved robustness)
           const transformed = results.data
             .map((row: any, index: number) => { // Add index for potential logging
                 // Check for required fields based on source type and selections
@@ -259,9 +261,9 @@ function App() {
                     if (sourceType === 'telegram') {
                         // For Telegram data
                         if (accountSource === 'telegram_channel') {
-                            accountIdVal = `${row.channel_name} ${row.channel_id}`;
+                            accountIdVal = `${row.channel_name || ''} ${row.channel_id || ''}`.trim();
                         } else if (accountSource === 'telegram_author') {
-                            accountIdVal = `${row.post_author} ${row.sender_id}`;
+                            accountIdVal = `${row.post_author || ''} ${row.sender_id || ''}`.trim();
                         }
                         
                         contentIdVal = row.message_id;
@@ -327,7 +329,7 @@ function App() {
                         return {
                             account_id: String(accountIdVal),
                             content_id: String(contentIdVal),
-                            object_id: String(objectIdSourceVal || ''),
+                            object_id: String(objectIdSourceVal || '').replace(/[\r\n]+/g, ' '),
                             timestamp_share: typeof timestampVal === 'string' ? 
                                 Math.floor(new Date(timestampVal).getTime() / 1000) : 
                                 typeof timestampVal === 'number' ? 
@@ -337,16 +339,16 @@ function App() {
                     }
                     else if (sourceType === 'youtube') {
                         return {
-                            account_id: `${row.channelTitle} (${row.channelId})`,
-                            content_id: String(row.videoId),
-                            object_id: String(objectIdSourceVal),
+                            account_id: `${row.channelTitle || ''} (${row.channelId || ''})`.trim(),
+                            content_id: String(row.videoId || ''),
+                            object_id: String(objectIdSourceVal || '').replace(/[\r\n]+/g, ' '),
                             timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
                         };
                     } else if (sourceType === 'bluesky') {
                         return {
-                            account_id: String(row.username),
-                            content_id: String(row.id),
-                            object_id: String(objectIdSourceVal),
+                            account_id: String(row.username || ''),
+                            content_id: String(row.id || ''),
+                            object_id: String(objectIdSourceVal || '').replace(/[\r\n]+/g, ' '),
                             timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
                         };
                     } else if (sourceType === 'tiktok') {
@@ -354,11 +356,13 @@ function App() {
                         let finalObjectId = '';
                         if (objectIdSourceVal !== undefined && objectIdSourceVal !== null) {
                             finalObjectId = typeof objectIdSourceVal === 'string' ? objectIdSourceVal : String(objectIdSourceVal);
+                            // Replace newlines and sanitize the object_id
+                            finalObjectId = finalObjectId.replace(/[\r\n]+/g, ' ');
                         }
 
                          return {
-                             account_id: `${row.author_name} (${row.region_code || 'unknown'})`,
-                             content_id: String(row.video_id),
+                             account_id: `${row.author_name || ''} (${row.region_code || 'unknown'})`.trim(),
+                             content_id: String(row.video_id || ''),
                              object_id: finalObjectId,
                              timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
                          };
@@ -366,9 +370,9 @@ function App() {
                         const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
                         const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
                         return {
-                            account_id: `${row[nameField]} (${row[idField]})`,
-                            content_id: String(row.id),
-                            object_id: String(objectIdSourceVal),
+                            account_id: `${row[nameField] || ''} (${row[idField] || ''})`.trim(),
+                            content_id: String(row.id || ''),
+                            object_id: String(objectIdSourceVal || '').replace(/[\r\n]+/g, ' '),
                             timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
                         };
                     }
@@ -411,7 +415,11 @@ function App() {
             }
           }
 
-          const csvContent = Papa.unparse(transformed);
+          const csvContent = Papa.unparse(transformed, {
+            quotes: true, // Always quote fields
+            quoteChar: '"', // Use double quotes
+            escapeChar: '"' // Escape quotes with an additional quote
+          });
           const estimatedSizeMB = new Blob([csvContent]).size / (1024 * 1024);
 
           setTransformedData(transformed);
@@ -444,7 +452,13 @@ function App() {
   const handleDownload = () => {
     if (!transformedData) return;
 
-    const csv = Papa.unparse(transformedData);
+    // Configure PapaParse to properly handle commas and special characters
+    const csv = Papa.unparse(transformedData, {
+      quotes: true, // Always quote fields
+      quoteChar: '"', // Use double quotes
+      escapeChar: '"' // Escape quotes with an additional quote
+    });
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -468,7 +482,11 @@ function App() {
     // Split data into chunks
     for (let i = 0; i < transformedData.length; i += maxRowsPerFile) {
       const chunk = transformedData.slice(i, i + maxRowsPerFile);
-      const chunkCsv = Papa.unparse(chunk);
+      const chunkCsv = Papa.unparse(chunk, {
+        quotes: true, // Always quote fields
+        quoteChar: '"', // Use double quotes
+        escapeChar: '"' // Escape quotes with an additional quote
+      });
       zip.file(`${sourceType}_csds_part${Math.floor(i/maxRowsPerFile) + 1}_${new Date().toISOString().slice(0,10)}.csv`, chunkCsv);
     }
     
@@ -511,7 +529,11 @@ function App() {
     
     // Create files for each period
     Array.from(periodGroups.entries()).forEach(([period, rows]) => {
-      const periodCsv = Papa.unparse(rows);
+      const periodCsv = Papa.unparse(rows, {
+        quotes: true, // Always quote fields
+        quoteChar: '"', // Use double quotes
+        escapeChar: '"' // Escape quotes with an additional quote
+      });
       zip.file(`${sourceType}_csds_period_${period}_${new Date().toISOString().slice(0,10)}.csv`, periodCsv);
     });
     
@@ -559,7 +581,11 @@ function App() {
     });
     
     // Create and download the sampled CSV
-    const sampledCsv = Papa.unparse(sampledData);
+    const sampledCsv = Papa.unparse(sampledData, {
+      quotes: true, // Always quote fields
+      quoteChar: '"', // Use double quotes
+      escapeChar: '"' // Escape quotes with an additional quote
+    });
     const blob = new Blob([sampledCsv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
