@@ -1,12 +1,36 @@
 # CSDS Pre-processor
 
-A web application that transforms CSV files from various social media platforms into the format required by the [Coordinated Sharing Detection Service](https://coortweet.lab.atc.gr/) powered by [CooRTweet](https://github.com/nicolarighetti/CooRTweet).
+A web application that transforms CSV files from various social media platforms into the standardized format required by the Coordinated Sharing Detection Service (CSDS), which utilizes [CooRTweet](https://github.com/nicolarighetti/CooRTweet).
 
 This work was carried out in the context of the [VERA.AI project](https://veraai.eu).
 
+<!-- TODO: Add a screenshot of the application interface here -->
+
+## Table of Contents
+
+- [CSDS Pre-processor](#csds-pre-processor)
+  - [🚀 Features](#features)
+  - [📊 Input Formats](#input-formats)
+    - [Meta Content Library (Facebook & Instagram)](#meta-content-library-facebook--instagram)
+    - [TikTok Research API](#tiktok-research-api)
+    - [YouTube (via YouTube Data Tools)](#youtube-via-youtube-data-tools)
+    - [BlueSky (via Communalytic)](#bluesky-via-communalytic)
+    - [Telegram](#telegram)
+  - [📋 Output Format (CSDS)](#output-format-csds)
+  - [📦 File Size Management](#file-size-management)
+  - [📝 Usage](#usage)
+  - [🛠️ Development](#development)
+    - [Technologies](#technologies)
+    - [Local Development](#local-development)
+  - [🤝 Contributing](#contributing)
+  - [📄 License](#license)
+  - [👨‍💻 Author](#author)
+  - [📚 About CooRTweet](#about-coortweet)
+  - [🆕 Recent Updates (v1.2.1)](#recent-updates-v121)
+
 ## 🚀 Features
 
-- **Multi-platform Support**: Converts data from various platforms to CSDS format:
+- **Multi-platform Support**: Supports data conversion from:
   - Meta Content Library (Facebook and Instagram)
   - TikTok Research API
   - YouTube (via YouTube Data Tools)
@@ -35,6 +59,8 @@ This work was carried out in the context of the [VERA.AI project](https://veraai
   - Descriptive naming conventions for output files
 
 ## 📊 Input Formats
+
+The tool expects specific CSV structures and fields depending on the source platform. Key required fields for each platform are listed below:
 
 ### Meta Content Library (Facebook & Instagram)
 
@@ -170,6 +196,20 @@ npm run build
 npm run deploy
 ```
 
+## 🤝 Contributing
+
+Contributions are welcome and greatly appreciated! If you have an idea for a new feature, a bug fix, or an improvement, please feel free to contribute.
+
+Here are some general guidelines:
+
+1.  **Fork the Repository**: Start by forking the main repository to your own GitHub account.
+2.  **Create a New Branch**: For each new feature or bug fix, create a new branch in your forked repository. This helps keep your changes organized. A good branch name could be `feature/your-feature-name` or `fix/issue-description`.
+3.  **Write Clear Commit Messages**: Make sure your commit messages are clear and descriptive. This helps others understand the changes you've made.
+4.  **Ensure Functionality**: Please ensure that your changes do not break any existing functionality. While this project may not have an extensive automated test suite, testing your changes manually is crucial.
+5.  **Submit a Pull Request**: Once you're happy with your changes, submit a pull request from your branch to the main repository's `main` branch. Provide a clear description of the changes in your pull request.
+
+We look forward to your contributions!
+
 ## 📄 License
 
 MIT License
@@ -180,7 +220,7 @@ Fabio Giglietto - [@fabiogiglietto](https://github.com/fabiogiglietto)
 
 ## 📚 About CooRTweet
 
-[CooRTweet](https://github.com/nicolarighetti/CooRTweet) is a flexible engine that detects coordinated sharing behavior on social media platforms. Developed by Nicola Righetti and Paul Balluff, it builds on existing research on coordinated behavior to provide a tool for detecting various coordinated networks across multiple social media platforms.
+[CooRTweet](https://github.com/nicolarighetti/CooRTweet) is a flexible engine by Nicola Righetti and Paul Balluff for detecting coordinated sharing behaviors on social media. It builds on existing research to identify coordinated networks across various platforms.
 
 ## 🆕 Recent Updates (v1.2.1)
 
