@@ -41,7 +41,7 @@ This work was carried out in the context of the [VERA.AI project](https://veraai
 Required fields:
 - `surface.id`/`post_owner.id` (account identifier)
 - `surface.name`/`post_owner.name` (account name)
-- `id` (content identifier)
+- `mcl_url` (content identifier - unique post URL)
 - `creation_time` (post timestamp)
 - `text` (post text content)
 - `link_attachment.link` (link URL if present, for Facebook)
@@ -182,8 +182,13 @@ Fabio Giglietto - [@fabiogiglietto](https://github.com/fabiogiglietto)
 
 [CooRTweet](https://github.com/nicolarighetti/CooRTweet) is a flexible engine that detects coordinated sharing behavior on social media platforms. Developed by Nicola Righetti and Paul Balluff, it builds on existing research on coordinated behavior to provide a tool for detecting various coordinated networks across multiple social media platforms.
 
-## 🆕 Recent Updates (v1.2.1)
+## 🆕 Recent Updates
 
+### v1.2.2
+- Changed Facebook and Instagram to use `mcl_url` as unique post identifier instead of `id`
+- Updated UI documentation to reflect the new required field
+
+### v1.2.1
 - Removed "Video Url" option from TikTok platform source
 - Added Telegram support
 - Fixed duplicate links in the App interface
