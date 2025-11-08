@@ -238,7 +238,7 @@ function App() {
                         const idField = accountSource === 'post_owner' ? 'post_owner.id' : 'surface.id';
                         const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
                         accountIdVal = row[idField];
-                        contentIdVal = row.id;
+                        contentIdVal = row.mcl_url;
                         timestampVal = row.creation_time;
                         objectIdSourceVal = (objectIdSource === 'text') ? row.text : row['link_attachment.link'];
                         isValid = Boolean(accountIdVal && row[nameField] && contentIdVal && timestampVal && objectIdSourceVal !== undefined && objectIdSourceVal !== null && objectIdSourceVal !== '');
@@ -299,7 +299,7 @@ function App() {
                         const nameField = accountSource === 'post_owner' ? 'post_owner.name' : 'surface.name';
                         return {
                             account_id: `${row[nameField]} (${row[idField]})`,
-                            content_id: String(row.id),
+                            content_id: String(row.mcl_url),
                             object_id: String(objectIdSourceVal),
                             timestamp_share: Math.floor(new Date(timestampVal as string).getTime() / 1000)
                         };
@@ -745,7 +745,7 @@ function App() {
                      {sourceType === 'youtube' && <Alert type="info">Required YouTube Data Tools columns: 'videoId', 'channelTitle', 'channelId', 'publishedAt', and your selected Object ID source ('videoTitle', 'videoDescription', or 'tags')</Alert>}
                      {sourceType === 'tiktok' && <Alert type="info">Required TikTok columns: 'video_id', 'author_name', 'create_time', and your selected Object ID source</Alert>}
                      {sourceType === 'telegram' && <Alert type="info">Required Telegram columns: 'channel_name', 'channel_id', 'message_id', 'date', 'sender_id', 'post_author', 'message_text'</Alert>}
-                     {(sourceType === 'facebook' || sourceType === 'instagram') && <Alert type="info">Required Meta columns: 'id', 'creation_time', 'text' (if chosen), 'link_attachment.link' (if chosen, Facebook only), and the ID/Name fields corresponding to your Account Source choice (<code>post_owner.*</code> or <code>surface.*</code>)</Alert>}
+                     {(sourceType === 'facebook' || sourceType === 'instagram') && <Alert type="info">Required Meta columns: 'mcl_url', 'creation_time', 'text' (if chosen), 'link_attachment.link' (if chosen, Facebook only), and the ID/Name fields corresponding to your Account Source choice (<code>post_owner.*</code> or <code>surface.*</code>)</Alert>}
                  </>
              )}
           </div>
